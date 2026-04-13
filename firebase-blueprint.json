@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "An item in the inventory",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the product" },
+        "code": { "type": "string", "description": "Unique code or SKU" },
+        "category": { "type": "string", "description": "Product category" },
+        "notes": { "type": "string", "description": "General observations of the product" },
+        "stockProvincia": { "type": "number", "description": "Current stock in Provincia" },
+        "stockNacion": { "type": "number", "description": "Current stock in Nacion" }
+      },
+      "required": ["name", "code"]
+    },
+    "Movement": {
+      "title": "Movement",
+      "description": "A stock entry or exit",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "description": "ID of the product" },
+        "productName": { "type": "string", "description": "Name of the product at time of movement" },
+        "type": { "type": "string", "enum": ["entry", "exit"], "description": "Entry or Exit" },
+        "scope": { "type": "string", "enum": ["provincia", "nacion"], "description": "Which inventory is affected" },
+        "quantity": { "type": "number", "description": "Amount moved" },
+        "documentType": { "type": "string", "enum": ["boleta", "remito", "nota", "otro"], "description": "Type of supporting document" },
+        "documentNumber": { "type": "string", "description": "Reference number of the document" },
+        "date": { "type": "string", "format": "date-time", "description": "When the movement happened" },
+        "notes": { "type": "string", "description": "Optional notes" },
+        "userEmail": { "type": "string", "description": "User who registered the movement" }
+      },
+      "required": ["productId", "type", "scope", "quantity", "date"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Collection of inventory items"
+    },
+    "/movements/{movementId}": {
+      "schema": "Movement",
+      "description": "History of all stock movements"
+    }
+  }
+}

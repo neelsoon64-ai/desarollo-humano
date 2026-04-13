@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@theme {
+  --color-chubut-yellow: #FFB800;
+  --color-chubut-orange: #FF6B00;
+  --color-chubut-blue-light: #6B9AB0;
+  --color-chubut-blue-dark: #2C5F78;
+  --color-chubut-bg: #F0F4F7;
+}
