@@ -52,6 +52,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [loginError, setLoginError] = useState('');
 
   // --- AUTENTICACIÓN ---
@@ -61,6 +62,16 @@ function App() {
       setLoading(false);
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail') || '';
+    const savedRemember = localStorage.getItem('rememberMe') === 'true';
+
+    if (savedRemember && savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
   }, []);
 
   // --- CARGA DE DATOS ---
@@ -87,8 +98,29 @@ function App() {
     e.preventDefault();
     setLoginError('');
 
+    const trimmedEmail = email.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!trimmedEmail || !password) {
+      setLoginError('Ingresa correo y contraseña.');
+      return;
+    }
+
+    if (!emailRegex.test(trimmedEmail)) {
+      setLoginError('Ingresa un correo válido.');
+      return;
+    }
+
     try {
-      await loginWithEmailPassword(email.trim(), password);
+      await loginWithEmailPassword(trimmedEmail, password);
+
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', trimmedEmail);
+        localStorage.setItem('rememberMe', 'true');
+      } else {
+        localStorage.removeItem('rememberedEmail');
+        localStorage.setItem('rememberMe', 'false');
+      }
     } catch (error) {
       console.error('Error de inicio de sesión:', error);
       setLoginError('Correo o contraseña incorrectos. Verifica tus datos.');
@@ -176,6 +208,17 @@ function App() {
                 className="w-full rounded-2xl border border-gray-200 bg-[#FBFCFE] px-4 py-3 text-sm font-medium text-slate-700 shadow-sm outline-none transition focus:border-[#2C5F78] focus:ring-2 focus:ring-[#6B9AB0]/30"
                 required
               />
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="inline-flex items-center gap-2 text-sm text-slate-700 font-medium">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-[#2C5F78] focus:ring-[#2C5F78]"
+                />
+                Recordarme
+              </label>
             </div>
             {loginError && (
               <p className="text-sm text-red-600 font-medium">{loginError}</p>
