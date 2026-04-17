@@ -1,18 +1,10 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   collection, 
   onSnapshot, 
   query, 
   orderBy, 
-  doc, 
-  Timestamp, 
-  runTransaction,
-  getDocFromServer
+  Timestamp 
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db, loginWithGoogle, logout } from './firebase';
@@ -24,35 +16,19 @@ import {
   LogOut, 
   LogIn, 
   Search,
-  AlertCircle,
-  ChevronUp,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  EyeOff,
-  ArrowUpDown,
   Trash2,
-  Info,
-  Calendar
+  Info
 } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
-import { motion } from 'motion/react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { motion } from 'framer-motion';
 
-// --- UTILITIES & TYPES ---
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
+// --- INTERFACES ---
 interface Product {
   id: string;
   name: string;
   code: string;
   category: string;
-  notes?: string;
   stockProvincia: number;
   stockNacion: number;
 }
@@ -64,11 +40,7 @@ interface Movement {
   type: 'entry' | 'exit';
   scope: 'provincia' | 'nacion';
   quantity: number;
-  documentType: 'boleta' | 'remito' | 'nota' | 'otro';
-  documentNumber: string;
   date: Timestamp;
-  notes: string;
-  userEmail: string;
 }
 
 function App() {
@@ -78,23 +50,8 @@ function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showProvinciaCol, setShowProvinciaCol] = useState(true);
-  const [showNacionCol, setShowNacionCol] = useState(true);
-  const [stockThreshold, setStockThreshold] = useState(5);
-  const [movementsPage, setMovementsPage] = useState(1);
-  const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
-  const [sortConfig, setSortConfig] = useState<{ key: keyof Product, direction: 'asc' | 'desc' } | null>(null);
-  
-  const [globalError, setGlobalError] = useState<string | null>(null);
 
-  // --- MODALS / UI STATE ---
-  const [showAddProduct, setShowAddProduct] = useState(false);
-  const [showMovementForm, setShowMovementForm] = useState<{product: Product, type: 'entry' | 'exit'} | null>(null);
-  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [selectedMovement, setSelectedMovement] = useState<Movement | null>(null);
-
-  // --- EFFECTS ---
+  // --- AUTENTICACIÓN ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -103,6 +60,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // --- CARGA DE DATOS ---
   useEffect(() => {
     if (!user) return;
 
@@ -122,102 +80,66 @@ function App() {
     };
   }, [user]);
 
-  // --- LOGIC ---
-  const handleSort = (key: keyof Product) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
+  // --- FILTROS ---
   const filteredProducts = useMemo(() => {
-    let result = products.filter(p => 
+    return products.filter(p => 
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       p.code.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    if (sortConfig) {
-      result.sort((a, b) => {
-        const aValue = a[sortConfig.key] ?? '';
-        const bValue = b[sortConfig.key] ?? '';
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return result;
-  }, [products, searchTerm, sortConfig]);
-
-  const filteredMovements = useMemo(() => {
-    let result = movements.filter(m => m.scope === activeTab);
-    if (dateFilter.start) {
-      const start = new Date(dateFilter.start);
-      result = result.filter(m => m.date.toDate() >= start);
-    }
-    if (dateFilter.end) {
-      const end = new Date(dateFilter.end);
-      end.setHours(23, 59, 59, 999);
-      result = result.filter(m => m.date.toDate() <= end);
-    }
-    return result;
-  }, [movements, activeTab, dateFilter]);
+  }, [products, searchTerm]);
 
   const handleExportExcel = () => {
     const data = movements.map(m => ({
-      Fecha: format(m.date.toDate(), 'dd/MM/yyyy HH:mm'),
+      Fecha: format(m.date.toDate(), 'dd/MM/yyyy'),
       Producto: m.productName,
       Tipo: m.type === 'entry' ? 'Entrada' : 'Salida',
-      Ámbito: m.scope.toUpperCase(),
-      Cantidad: m.quantity,
-      Documento: m.documentType.toUpperCase(),
-      'Nro Documento': m.documentNumber,
-      Usuario: m.userEmail,
-      Notas: m.notes
+      Cantidad: m.quantity
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Historial");
-    XLSX.writeFile(wb, `Inventario_${activeTab}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+    XLSX.writeFile(wb, `Inventario_${format(new Date(), 'yyyyMMdd')}.xlsx`);
   };
 
-  // --- RENDERING ---
   if (loading) {
     return (
-      <div className="min-h-screen bg-chubut-bg flex flex-col items-center justify-center gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-chubut-blue-dark"></div>
-        <p className="text-chubut-blue-dark font-medium">Cargando Sistema...</p>
+      <div className="min-h-screen bg-[#F0F4F7] flex flex-col items-center justify-center gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2C5F78]"></div>
+        <p className="text-[#2C5F78] font-bold uppercase tracking-wider">Cargando Sistema...</p>
       </div>
     );
   }
 
+  // --- VISTA DE LOGIN ---
   if (!user) {
     return (
-      <div className="min-h-screen bg-chubut-bg flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-[#F0F4F7] flex flex-col items-center justify-center p-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center border-t-4 border-chubut-orange"
+          className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center border-t-8 border-[#FF6B00]"
         >
-          <div className="mb-6 flex justify-center">
-            <div className="bg-white w-32 h-32 rounded-2xl flex items-center justify-center border border-chubut-blue-light/10 shadow-sm overflow-hidden p-2">
+          <div className="mb-8 flex justify-center">
+            <div className="bg-white w-32 h-32 rounded-2xl flex items-center justify-center border border-gray-100 shadow-sm overflow-hidden p-2">
               <img
                 src="/logochubut.png"
-                alt="Chubut"
+                alt="Logo Chubut"
                 className="w-full h-full object-contain"
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = "https://www.chubut.gov.ar/wp-content/uploads/2023/12/logo-chubut.png";
+                   (e.target as HTMLImageElement).src = "https://www.chubut.gov.ar/wp-content/uploads/2023/12/logo-chubut.png";
                 }}
               />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-chubut-blue-dark mb-2">Ministerio de Desarrollo Humano</h1>
-          <p className="text-gray-600 mb-8">Gobierno del Chubut - Sistema de Inventario</p>
+          
+          <h1 className="text-2xl font-black text-[#2C5F78] mb-2 uppercase tracking-tight">Ministerio de Desarrollo Humano</h1>
+          <p className="text-gray-500 font-medium mb-10">Gobierno del Chubut - Sistema de Inventario</p>
           
           <button 
             onClick={loginWithGoogle}
-            className="w-full flex items-center justify-center gap-3 bg-chubut-blue-dark text-white py-3 px-6 rounded-xl hover:bg-chubut-blue-light transition-colors font-medium shadow-lg shadow-chubut-blue-dark/20"
+            className="w-full flex items-center justify-center gap-3 bg-[#2C5F78] text-white py-4 px-6 rounded-xl hover:bg-[#6B9AB0] transition-all font-bold shadow-lg shadow-blue-900/20"
           >
-            <LogIn className="w-5 h-5" />
+            <LogIn className="w-6 h-6" />
             Ingresar con Google
           </button>
         </motion.div>
@@ -225,100 +147,119 @@ function App() {
     );
   }
 
+  // --- DASHBOARD PRINCIPAL ---
   return (
-    <div className="min-h-screen bg-chubut-bg text-gray-900 font-sans">
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-8">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center border border-chubut-blue-light/10 shadow-sm overflow-hidden p-1">
-                  <img src="/logochubut.png" alt="Logo" className="w-full h-full object-contain" />
-                </div>
-                <div className="flex flex-col leading-none">
-                  <span className="font-bold text-sm tracking-tight uppercase text-chubut-blue-dark">Ministerio de Desarrollo Humano</span>
-                  <span className="text-[10px] font-bold text-chubut-orange uppercase tracking-widest">Gobierno del Chubut</span>
-                </div>
-              </div>
-              <div className="hidden sm:flex gap-1">
-                <button onClick={() => setActiveTab('provincia')} className={cn("px-4 py-2 rounded-lg text-sm font-bold transition-all", activeTab === 'provincia' ? "bg-chubut-blue-dark text-white" : "text-chubut-blue-light hover:bg-chubut-blue-light/10")}>Provincia</button>
-                <button onClick={() => setActiveTab('nacion')} className={cn("px-4 py-2 rounded-lg text-sm font-bold transition-all", activeTab === 'nacion' ? "bg-chubut-blue-dark text-white" : "text-chubut-blue-light hover:bg-chubut-blue-light/10")}>Nación</button>
-              </div>
+    <div className="min-h-screen bg-[#F0F4F7]">
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 h-20 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 overflow-hidden p-1">
+              <img src="/logochubut.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <div className="flex items-center gap-4">
-              <div className="hidden md:block text-right">
-                <p className="text-xs font-medium text-gray-500">Usuario</p>
-                <p className="text-sm font-semibold">{user.email}</p>
-              </div>
-              <button onClick={logout} className="p-2 text-gray-500 hover:text-red-600 rounded-lg"><LogOut className="w-5 h-5" /></button>
+            <div>
+              <h2 className="font-black text-[#2C5F78] text-sm uppercase leading-tight">Secretaría de Trabajo</h2>
+              <p className="text-[#FF6B00] text-[10px] font-bold uppercase tracking-widest">Gobierno del Chubut</p>
             </div>
           </div>
+          <button onClick={logout} className="flex items-center gap-2 text-gray-500 hover:text-red-600 font-bold text-sm transition-colors uppercase">
+            <span>Salir</span>
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <main className="max-w-7xl mx-auto px-4 py-10">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight text-chubut-blue-dark">Inventario {activeTab === 'provincia' ? 'Provincia' : 'Nación'}</h2>
-            <p className="text-chubut-blue-light font-medium mt-1">Gestión de existencias oficiales.</p>
+            <h3 className="text-4xl font-black text-[#2C5F78] uppercase">Panel de Control</h3>
+            <div className="flex gap-2 mt-4">
+              <button 
+                onClick={() => setActiveTab('provincia')}
+                className={`px-6 py-2 rounded-full font-bold text-sm transition-all ${activeTab === 'provincia' ? 'bg-[#2C5F78] text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+              >
+                PROVINCIA
+              </button>
+              <button 
+                onClick={() => setActiveTab('nacion')}
+                className={`px-6 py-2 rounded-full font-bold text-sm transition-all ${activeTab === 'nacion' ? 'bg-[#2C5F78] text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+              >
+                NACIÓN
+              </button>
+            </div>
           </div>
+
           <div className="flex flex-wrap gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-chubut-blue-light" />
-              <input type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 pr-4 py-2 border border-chubut-blue-light/20 rounded-xl focus:outline-none w-64 shadow-sm" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input 
+                type="text" 
+                placeholder="Buscar insumos..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#6B9AB0] outline-none w-72 bg-white shadow-sm font-medium" 
+              />
             </div>
-            <button onClick={() => setShowAddProduct(true)} className="flex items-center gap-2 bg-chubut-blue-dark text-white px-4 py-2 rounded-xl font-bold shadow-md hover:bg-chubut-blue-light transition-colors"><Plus className="w-4 h-4" /> Nuevo Producto</button>
-            <button onClick={handleExportExcel} className="flex items-center gap-2 bg-white border border-chubut-blue-light/20 text-chubut-blue-dark px-4 py-2 rounded-xl font-bold shadow-sm hover:bg-chubut-bg transition-colors"><Download className="w-4 h-4" /> Excel</button>
+            <button onClick={handleExportExcel} className="bg-white border border-gray-200 text-[#2C5F78] px-5 py-3 rounded-xl font-bold hover:bg-gray-50 transition-all flex items-center gap-2 shadow-sm">
+              <Download className="w-5 h-5" /> EXCEL
+            </button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-              <table className="w-full text-left">
-                <thead className="bg-chubut-bg border-b border-chubut-blue-light/20">
-                  <tr>
-                    <th className="px-6 py-4 text-xs font-bold text-chubut-blue-dark uppercase cursor-pointer" onClick={() => handleSort('name')}>Producto</th>
-                    <th className="px-6 py-4 text-xs font-bold text-chubut-blue-dark uppercase">Código</th>
-                    <th className="px-6 py-4 text-xs font-bold text-chubut-blue-dark uppercase">Stock</th>
-                    <th className="px-6 py-4 text-xs font-bold text-chubut-blue-dark uppercase text-right">Acciones</th>
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Insumo / Descripción</th>
+                  <th className="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Código</th>
+                  <th className="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Existencias</th>
+                  <th className="px-6 py-4 text-right text-xs font-black text-gray-400 uppercase tracking-widest">Gestión</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filteredProducts.map(product => (
+                  <tr key={product.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-5 font-bold text-[#2C5F78]">{product.name}</td>
+                    <td className="px-6 py-5 text-sm font-mono text-gray-400">{product.code}</td>
+                    <td className="px-6 py-5">
+                      <span className={`px-3 py-1 rounded-lg font-black text-sm ${
+                        (activeTab === 'provincia' ? product.stockProvincia : product.stockNacion) < 10 
+                        ? 'bg-red-50 text-red-600' 
+                        : 'bg-green-50 text-green-700'
+                      }`}>
+                        {activeTab === 'provincia' ? product.stockProvincia : product.stockNacion}
+                      </span>
+                    </td>
+                    <td className="px-6 py-5 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button className="p-2 text-[#6B9AB0] hover:bg-[#6B9AB0]/10 rounded-lg"><Info className="w-5 h-5" /></button>
+                        <button className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-5 h-5" /></button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-chubut-blue-light/10">
-                  {filteredProducts.map(product => (
-                    <tr key={product.id} className="hover:bg-chubut-bg/50 group transition-colors">
-                      <td className="px-6 py-4 font-bold text-chubut-blue-dark">{product.name}</td>
-                      <td className="px-6 py-4 text-sm font-mono text-chubut-blue-light">{product.code}</td>
-                      <td className="px-6 py-4">
-                        <span className={cn("px-2.5 py-0.5 rounded-full text-sm font-bold", (activeTab === 'provincia' ? product.stockProvincia : product.stockNacion) <= stockThreshold ? "bg-chubut-orange/10 text-chubut-orange" : "bg-green-100 text-green-800")}>
-                          {activeTab === 'provincia' ? product.stockProvincia : product.stockNacion}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right flex justify-end gap-2">
-                        <button className="p-2 text-chubut-blue-dark hover:bg-chubut-blue-light/10 rounded-lg"><Info className="w-4 h-4" /></button>
-                        <button className="p-2 text-chubut-orange hover:bg-chubut-orange/10 rounded-lg"><Trash2 className="w-4 h-4" /></button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="font-bold flex items-center gap-2 text-chubut-blue-dark"><History className="w-4 h-4" /> Movimientos Recientes</h3>
-            <div className="bg-white rounded-2xl border border-chubut-blue-light/10 p-4 shadow-sm space-y-4 max-h-[500px] overflow-y-auto">
-              {filteredMovements.slice(0, 10).map(m => (
-                <div key={m.id} className="flex gap-4 p-3 rounded-xl bg-chubut-bg/30 border border-chubut-blue-light/5">
-                  <div className={cn("w-10 h-10 rounded-full flex items-center justify-center shrink-0", m.type === 'entry' ? "bg-chubut-yellow/10 text-chubut-yellow" : "bg-chubut-orange/10 text-chubut-orange")}>
-                    {m.type === 'entry' ? <Plus className="w-5 h-5" /> : <Minus className="w-5 h-5" />}
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <h4 className="font-black text-[#2C5F78] uppercase mb-4 flex items-center gap-2">
+                <History className="w-5 h-5 text-[#FF6B00]" /> Historial Reciente
+              </h4>
+              <div className="space-y-4">
+                {movements.slice(0, 5).map(m => (
+                  <div key={m.id} className="flex items-center gap-4 p-3 rounded-xl bg-[#F0F4F7]/50 border border-gray-100">
+                    <div className={`p-2 rounded-lg ${m.type === 'entry' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                      {m.type === 'entry' ? <Plus className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
+                    </div>
+                    <div className="overflow-hidden">
+                      <p className="text-sm font-bold text-[#2C5F78] truncate uppercase">{m.productName}</p>
+                      <p className="text-[10px] font-bold text-gray-400">{format(m.date.toDate(), 'dd/MM/yyyy HH:mm')}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-chubut-blue-dark truncate">{m.productName}</p>
-                    <p className="text-xs text-chubut-blue-light">{m.type === 'entry' ? 'Entrada' : 'Salida'} - {m.quantity} un.</p>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>
