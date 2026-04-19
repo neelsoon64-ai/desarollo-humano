@@ -313,51 +313,7 @@ function App() {
       </div>
     );
   }
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="********"
-                className="w-full rounded-2xl border border-gray-200 bg-[#FBFCFE] px-4 py-3 text-sm font-medium text-slate-700 shadow-sm outline-none transition focus:border-[#2C5F78] focus:ring-2 focus:ring-[#6B9AB0]/30"
-                required
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700 font-medium">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-[#2C5F78] focus:ring-[#2C5F78]"
-                />
-                Recordarme
-              </label>
-            </div>
-            {loginError && (
-              <p className="text-sm text-red-600 font-medium">{loginError}</p>
-            )}
-            <button
-              type="submit"
-              className="w-full bg-[#2C5F78] text-white py-4 rounded-2xl font-bold uppercase tracking-wider shadow-lg shadow-blue-900/15 hover:bg-[#1f4f63] transition"
-            >
-              Iniciar sesión
-            </button>
-          </form>
 
-          <div className="mt-6 text-sm text-gray-500">O puedes ingresar con tu cuenta de Google si prefieres.</div>
-          <button 
-            onClick={loginWithGoogle}
-            className="w-full mt-4 flex items-center justify-center gap-3 bg-white border border-gray-200 text-[#2C5F78] py-4 px-6 rounded-xl hover:bg-gray-50 transition-all font-bold shadow-sm"
-          >
-            <LogIn className="w-6 h-6" />
-            Ingresar con Google
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
 
   // --- DASHBOARD PRINCIPAL ---
   return (
