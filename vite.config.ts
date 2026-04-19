@@ -4,8 +4,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 3000,
-    strictPort: true, // Esto evita que salte al 3001 si el 3000 está ocupado
+    port: 5173, // Cambiamos el puerto aquí
+    strictPort: true, 
     hmr: {
       protocol: 'ws',
       host: 'localhost',
