@@ -7,7 +7,7 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db, loginWithGoogle, loginWithEmailPassword, logout } from './firebase';
+import { auth, db, loginWithGoogle, logout } from './firebase';
 import { 
   Plus, 
   Minus, 
@@ -50,38 +50,14 @@ function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
-  const [loginError, setLoginError] = useState('');
 
   // --- AUTENTICACIÓN ---
   useEffect(() => {
-    console.log('Inicializando Firebase Auth...');
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      console.log('Estado de auth cambiado:', u ? 'Usuario logueado' : 'No logueado');
       setUser(u);
       setLoading(false);
     });
-    // Timeout de seguridad en caso de que Firebase no responda
-    const timeout = setTimeout(() => {
-      console.log('Timeout alcanzado, forzando login screen');
-      setLoading(false);
-    }, 5000);
-    return () => {
-      unsubscribe();
-      clearTimeout(timeout);
-    };
-  }, []);
-
-  useEffect(() => {
-    const savedEmail = localStorage.getItem('rememberedEmail') || '';
-    const savedRemember = localStorage.getItem('rememberMe') === 'true';
-
-    if (savedRemember && savedEmail) {
-      setEmail(savedEmail);
-      setRememberMe(true);
-    }
+    return () => unsubscribe();
   }, []);
 
   // --- CARGA DE DATOS ---
@@ -104,39 +80,6 @@ function App() {
     };
   }, [user]);
 
-  const handleEmailLogin = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoginError('');
-
-    const trimmedEmail = email.trim();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!trimmedEmail || !password) {
-      setLoginError('Ingresa correo y contraseña.');
-      return;
-    }
-
-    if (!emailRegex.test(trimmedEmail)) {
-      setLoginError('Ingresa un correo válido.');
-      return;
-    }
-
-    try {
-      await loginWithEmailPassword(trimmedEmail, password);
-
-      if (rememberMe) {
-        localStorage.setItem('rememberedEmail', trimmedEmail);
-        localStorage.setItem('rememberMe', 'true');
-      } else {
-        localStorage.removeItem('rememberedEmail');
-        localStorage.setItem('rememberMe', 'false');
-      }
-    } catch (error) {
-      console.error('Error de inicio de sesión:', error);
-      setLoginError('Correo o contraseña incorrectos. Verifica tus datos.');
-    }
-  };
-
   // --- FILTROS ---
   const filteredProducts = useMemo(() => {
     return products.filter(p => 
@@ -158,6 +101,7 @@ function App() {
     XLSX.writeFile(wb, `Inventario_${format(new Date(), 'yyyyMMdd')}.xlsx`);
   };
 
+  // --- PANTALLA DE CARGA ---
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F0F4F7] flex flex-col items-center justify-center gap-4">
@@ -167,172 +111,61 @@ function App() {
     );
   }
 
-  // --- VISTA DE LOGIN ---
+  // --- VISTA DE LOGIN (CON LOGO WEB) ---
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#F0F4F7] via-[#E8F4FD] to-[#D1E7DD] flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        {/* Elementos decorativos de fondo */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-5">
-          <div className="absolute top-10 left-10 w-32 h-32 bg-[#FF6B00] rounded-full blur-xl"></div>
-          <div className="absolute bottom-10 right-10 w-40 h-40 bg-[#2C5F78] rounded-full blur-xl"></div>
-          <div className="absolute top-1/2 left-1/4 w-24 h-24 bg-[#6B9AB0] rounded-full blur-lg"></div>
-        </div>
-
+      <div className="min-h-screen bg-[#F0F4F7] flex flex-col items-center justify-center p-4">
         <motion.div 
-          initial={{ opacity: 0, y: 30, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="bg-white/95 backdrop-blur-sm p-10 rounded-3xl shadow-2xl max-w-md w-full text-center border border-white/20 relative z-10"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center border-t-8 border-[#FF6B00]"
         >
-          {/* Logo con animación */}
-          <motion.div 
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-            className="mb-8 flex justify-center"
-          >
-            <div className="bg-gradient-to-br from-[#2C5F78] to-[#1a3a4a] w-36 h-36 rounded-3xl flex items-center justify-center border-4 border-white shadow-xl overflow-hidden p-3">
+          {/* SECCIÓN DEL LOGO ACTUALIZADA */}
+          <div className="mb-8 flex justify-center">
+            <div className="bg-white w-32 h-32 rounded-2xl flex items-center justify-center border border-gray-100 shadow-sm overflow-hidden p-2">
               <img
-                src="/logochubut.png"
+                src="https://www.chubut.gov.ar/wp-content/uploads/2023/12/logo-chubut.png" // <--- URL OFICIAL
                 alt="Logo Gobierno del Chubut"
-                className="w-full h-full object-contain drop-shadow-sm"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "https://www.chubut.gov.ar/wp-content/uploads/2023/12/logo-chubut.png";
-                }}
+                className="w-full h-full object-contain"
+                crossOrigin="anonymous" // Para evitar problemas de CORS
               />
             </div>
-          </motion.div>
+          </div>
           
-          {/* Título con gradiente */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+          <h1 className="text-2xl font-black text-[#2C5F78] mb-2 uppercase tracking-tight">Ministerio de Desarrollo Humano</h1>
+          <p className="text-gray-500 font-medium mb-10">Gobierno del Chubut - Sistema de Inventario</p>
+          
+          <button 
+            onClick={loginWithGoogle}
+            className="w-full flex items-center justify-center gap-3 bg-[#2C5F78] text-white py-4 px-6 rounded-xl hover:bg-[#6B9AB0] transition-all font-bold shadow-lg shadow-blue-900/20"
           >
-            <h1 className="text-3xl font-black bg-gradient-to-r from-[#2C5F78] to-[#1a3a4a] bg-clip-text text-transparent mb-3 uppercase tracking-tight">
-              Ministerio de Desarrollo Humano
-            </h1>
-            <p className="text-gray-600 font-semibold text-lg mb-2">Gobierno del Chubut</p>
-            <p className="text-gray-500 font-medium mb-10">Sistema de Inventario</p>
-          </motion.div>
-
-          {/* Formulario con animaciones */}
-          <motion.form 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            onSubmit={handleEmailLogin} 
-            className="space-y-6 text-left"
-          >
-            <div>
-              <label htmlFor="email" className="block text-sm font-bold text-[#2C5F78] mb-3 uppercase tracking-wide">
-                Correo electrónico
-              </label>
-              <div className="relative">
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="usuario@chubut.gov.ar"
-                  className="w-full rounded-2xl border-2 border-gray-200 bg-white px-5 py-4 text-base font-medium text-slate-700 shadow-lg outline-none transition-all duration-300 focus:border-[#FF6B00] focus:ring-4 focus:ring-[#FF6B00]/20 hover:border-[#2C5F78]/50"
-                  required
-                />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-4">
-                  <div className="w-2 h-2 bg-[#FF6B00] rounded-full opacity-0 transition-opacity duration-300 focus-within:opacity-100"></div>
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <label htmlFor="password" className="block text-sm font-bold text-[#2C5F78] mb-3 uppercase tracking-wide">
-                Contraseña
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-2xl border-2 border-gray-200 bg-white px-5 py-4 text-base font-medium text-slate-700 shadow-lg outline-none transition-all duration-300 focus:border-[#FF6B00] focus:ring-4 focus:ring-[#FF6B00]/20 hover:border-[#2C5F78]/50"
-                  required
-                />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-4">
-                  <div className="w-2 h-2 bg-[#FF6B00] rounded-full opacity-0 transition-opacity duration-300 focus-within:opacity-100"></div>
-                </div>
-              </div>
-            </div>
-
-            {/* Checkbox recordar */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 text-[#FF6B00] bg-gray-100 border-gray-300 rounded focus:ring-[#FF6B00] focus:ring-2"
-                />
-                <span className="ml-2 text-sm font-medium text-gray-700">Recordar sesión</span>
-              </label>
-            </div>
-
-            {/* Error message */}
-            {loginError && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-sm font-medium"
-              >
-                {loginError}
-              </motion.div>
-            )}
-
-            {/* Botón de login */}
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              type="submit"
-              className="w-full bg-gradient-to-r from-[#FF6B00] to-[#e55a00] hover:from-[#e55a00] hover:to-[#cc4d00] text-white font-bold py-4 px-6 rounded-2xl shadow-xl transition-all duration-300 uppercase tracking-wide text-base"
-            >
-              Iniciar Sesión
-            </motion.button>
-          </motion.form>
-
-          {/* Footer */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
-            className="mt-8 pt-6 border-t border-gray-200"
-          >
-            <p className="text-xs text-gray-500 font-medium">
-              Sistema seguro • Gobierno del Chubut
-            </p>
-          </motion.div>
+            <LogIn className="w-6 h-6" />
+            Ingresar con Google
+          </button>
         </motion.div>
       </div>
     );
   }
 
-
   // --- DASHBOARD PRINCIPAL ---
   return (
     <div className="min-h-screen bg-[#F0F4F7]">
-      <nav className="bg-gradient-to-r from-[#2C5F78] to-[#FF6B00] border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-20 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 overflow-hidden p-1 bg-white rounded-lg">
-              <img src="/logochubut.png" alt="Logo" className="w-full h-full object-contain" />
+            <div className="w-14 h-14 overflow-hidden p-1">
+              <img 
+                src="https://www.chubut.gov.ar/wp-content/uploads/2023/12/logo-chubut.png" // <--- URL OFICIAL EN NAV
+                alt="Logo Chubut" 
+                className="w-full h-full object-contain" 
+              />
             </div>
             <div>
-              <h2 className="font-black text-white text-sm uppercase leading-tight">Secretaría de Trabajo</h2>
-              <p className="text-[#FFB800] text-[10px] font-bold uppercase tracking-widest">Gobierno del Chubut</p>
+              <h2 className="font-black text-[#2C5F78] text-sm uppercase leading-tight">Ministerio de Desarrollo Humano</h2>
+              <p className="text-[#FF6B00] text-[10px] font-bold uppercase tracking-widest">Gobierno del Chubut</p>
             </div>
           </div>
-          <button onClick={logout} className="flex items-center gap-2 text-white hover:text-gray-200 font-bold text-sm transition-colors uppercase">
+          <button onClick={logout} className="flex items-center gap-2 text-gray-500 hover:text-red-600 font-bold text-sm transition-colors uppercase">
             <span>Salir</span>
             <LogOut className="w-5 h-5" />
           </button>
@@ -342,7 +175,7 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 py-10">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div>
-            <h3 className="text-4xl font-black text-[#2C5F78] uppercase">Panel de Control</h3>
+            <h3 className="text-4xl font-black text-[#2C5F78] uppercase">Panel de Insumos</h3>
             <div className="flex gap-2 mt-4">
               <button 
                 onClick={() => setActiveTab('provincia')}
@@ -403,8 +236,8 @@ function App() {
                     </td>
                     <td className="px-6 py-5 text-right">
                       <div className="flex justify-end gap-2">
-                        <button title="Información" className="p-2 text-[#6B9AB0] hover:bg-[#6B9AB0]/10 rounded-lg"><Info className="w-5 h-5" /></button>
-                        <button title="Eliminar" className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-5 h-5" /></button>
+                        <button className="p-2 text-[#6B9AB0] hover:bg-[#6B9AB0]/10 rounded-lg"><Info className="w-5 h-5" /></button>
+                        <button className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 className="w-5 h-5" /></button>
                       </div>
                     </td>
                   </tr>
