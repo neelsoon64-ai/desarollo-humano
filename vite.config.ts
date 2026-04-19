@@ -4,11 +4,11 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173, // Cambiamos el puerto aquí
-    strictPort: true, 
+    port: 3000,
+    strictPort: false, // Permitir que use 3001, 3002, etc. si es necesario
+    host: true,       // Esto ayuda a que la red local lo vea mejor
     hmr: {
-      protocol: 'ws',
-      host: 'localhost',
-    },
-  },
+      overlay: false  // Evita que los errores tapen la pantalla
+    }
+  }
 })
