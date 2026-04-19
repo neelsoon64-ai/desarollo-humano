@@ -57,12 +57,15 @@ function App() {
 
   // --- AUTENTICACIÓN ---
   useEffect(() => {
+    console.log('Inicializando Firebase Auth...');
     const unsubscribe = onAuthStateChanged(auth, (u) => {
+      console.log('Estado de auth cambiado:', u ? 'Usuario logueado' : 'No logueado');
       setUser(u);
       setLoading(false);
     });
     // Timeout de seguridad en caso de que Firebase no responda
     const timeout = setTimeout(() => {
+      console.log('Timeout alcanzado, forzando login screen');
       setLoading(false);
     }, 5000);
     return () => {
