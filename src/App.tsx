@@ -15,6 +15,7 @@ interface InventoryItem {
   ubicacion: string;
   estado: 'En Stock' | 'Sin Stock';
   fechaActualizacion: string;
+  cargadoPor?: string;
 }
 
 interface FormData {
@@ -43,6 +44,8 @@ function App() {
     ubicacion: '',
     estado: 'En Stock',
   });
+  const [reportStatusFilter, setReportStatusFilter] = useState<'En Stock' | 'Sin Stock' | null>(null);
+  const [teamMembers, setTeamMembers] = useState<string[]>(['admin@chubut.gov.ar']);
 
   // Estados para el dashboard
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'inventario' | 'reportes' | 'configuracion'>('dashboard');
@@ -104,7 +107,8 @@ function App() {
       ubicacion: formData.ubicacion,
       estado: formData.estado,
       fechaActualizacion: new Date().toISOString().split('T')[0],
-      userId: user?.uid
+      userId: user?.uid,
+      cargadoPor: user?.email || 'Desconocido'
     };
 
     try {
@@ -178,7 +182,7 @@ function App() {
 
   const loadInventoryFromFirebase = async () => {
     try {
-      const q = query(collection(db, 'inventory'), where('userId', '==', user?.uid));
+      const q = query(collection(db, 'inventory'));
       const querySnapshot = await getDocs(q);
       const items: InventoryItem[] = [];
       querySnapshot.forEach((doc) => {
@@ -590,6 +594,7 @@ function App() {
                     <th className="px-6 py-4 text-center font-bold">Cantidad</th>
                     <th className="px-6 py-4 text-left font-bold">Ubicación</th>
                     <th className="px-6 py-4 text-left font-bold">Estado</th>
+                    <th className="px-6 py-4 text-left font-bold">Cargado Por</th>
                     <th className="px-6 py-4 text-center font-bold">Acciones</th>
                   </tr>
                 </thead>
@@ -614,6 +619,7 @@ function App() {
                           {item.estado}
                         </span>
                       </td>
+                      <td className="px-6 py-4 text-xs text-slate-500 italic">{item.cargadoPor || 'Sistema'}</td>
                       <td className="px-6 py-4 text-center">
                         <button onClick={() => handleEdit(item)} className="text-blue-600 hover:text-blue-800 mr-3">✏️</button>
                         <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800">🗑️</button>
@@ -709,12 +715,31 @@ function App() {
                 <h3 className="text-lg font-bold text-slate-900 mb-4">Reporte por Estado</h3>
                 <div className="space-y-3">
                   {['En Stock', 'Sin Stock'].map((estado) => (
-                    <div key={estado} className="flex justify-between items-center">
-                      <span className="text-slate-600">{estado}</span>
-                      <span className="text-2xl font-bold text-slate-900">{currentInventory.filter(i => i.estado === estado).length}</span>
-                    </div>
+                    <button 
+                      key={estado} 
+                      onClick={() => setReportStatusFilter(reportStatusFilter === estado ? null : estado as any)}
+                      className={`w-full flex justify-between items-center p-2 rounded-lg transition ${reportStatusFilter === estado ? 'bg-orange-100' : 'hover:bg-slate-50'}`}
+                    >
+                      <span className="text-slate-600 font-medium">{estado}</span>
+                      <span className={`text-2xl font-bold ${estado === 'En Stock' ? 'text-green-600' : 'text-red-600'}`}>
+                        {currentInventory.filter(i => i.estado === estado).length}
+                      </span>
+                    </button>
                   ))}
                 </div>
+                {reportStatusFilter && (
+                  <div className="mt-4 pt-4 border-t border-slate-100 max-h-40 overflow-y-auto">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Items en {reportStatusFilter}:</p>
+                    <ul className="text-sm space-y-2">
+                      {currentInventory.filter(i => i.estado === reportStatusFilter).map(item => (
+                        <li key={item.id} className="flex justify-between items-center p-2 bg-slate-50 rounded-md">
+                          <span className="text-slate-700 font-medium">{item.nombre}</span>
+                          <span className="text-xs bg-slate-200 px-2 py-0.5 rounded text-slate-600">Stock: {item.cantidad}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
               <div className="bg-white rounded-2xl p-6 shadow-md">
@@ -775,6 +800,37 @@ function App() {
                     <input type="checkbox" defaultChecked className="mr-2" />
                     <span className="text-slate-700">Reportes semanales</span>
                   </label>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-slate-200">
+                <h4 className="font-bold text-slate-900 mb-4">👥 Gestión de Equipo</h4>
+                <div className="flex gap-2 mb-4">
+                  <input id="newUserEmail" type="email" placeholder="correo@chubut.gov.ar" className="flex-1 px-4 py-2 rounded-lg border border-slate-300" />
+                  <button 
+                    onClick={() => {
+                      const input = document.getElementById('newUserEmail') as HTMLInputElement;
+                      if(input.value) { setTeamMembers([...teamMembers, input.value]); input.value = ''; }
+                    }}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 transition"
+                  >
+                    Añadir
+                  </button>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <p className="text-[10px] font-bold text-slate-500 mb-3 uppercase tracking-wider">Usuarios con acceso</p>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="font-semibold text-slate-700">{user?.email} (Tú)</span>
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-md uppercase">Administrador</span>
+                    </div>
+                    {teamMembers.map(email => (
+                      <div key={email} className="flex justify-between items-center text-sm">
+                        <span className="text-slate-600">{email}</span>
+                        <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-md uppercase">Editor</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
