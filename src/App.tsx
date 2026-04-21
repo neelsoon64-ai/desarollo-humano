@@ -33,10 +33,22 @@ function App() {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   
+  // Estados para CRUD y Filtrado
+  const [showForm, setShowForm] = useState(false);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [formData, setFormData] = useState<FormData>({
+    nombre: '',
+    categoria: '',
+    cantidad: '',
+    ubicacion: '',
+    estado: 'Activo',
+  });
+
   // Estados para el dashboard
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'inventario' | 'reportes' | 'configuracion'>('dashboard');
   const [inventoryType, setInventoryType] = useState<'provincial' | 'nacional'>('provincial');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([
     { id: '1', nombre: 'Laptop Dell', categoria: 'Equipos', cantidad: 5, ubicacion: 'Oficina A', estado: 'Activo', fechaActualizacion: '2026-04-15' },
     { id: '2', nombre: 'Mouse Inalámbrico', categoria: 'Periféricos', cantidad: 12, ubicacion: 'Almacén', estado: 'Activo', fechaActualizacion: '2026-04-10' },
@@ -52,6 +64,65 @@ function App() {
   ]);
 
   const currentInventory = inventoryType === 'provincial' ? inventoryItems : nationalInventoryItems;
+
+  const filteredInventory = currentInventory.filter(item => {
+    const matchesSearch = item.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'Todas' || item.categoria === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const handleEdit = (item: InventoryItem) => {
+    setEditingItem(item);
+    setFormData({
+      nombre: item.nombre,
+      categoria: item.categoria,
+      cantidad: item.cantidad.toString(),
+      ubicacion: item.ubicacion,
+      estado: item.estado
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm('¿Estás seguro de eliminar este elemento?')) {
+      try {
+        await deleteDoc(doc(db, 'inventory', id));
+      } catch (e) { /* Fallback para items locales */ }
+      
+      const updateList = (items: InventoryItem[]) => items.filter(i => i.id !== id);
+      if (inventoryType === 'provincial') setInventoryItems(updateList);
+      else setNationalInventoryItems(updateList);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const itemData: any = {
+      nombre: formData.nombre,
+      categoria: formData.categoria,
+      cantidad: parseInt(formData.cantidad) || 0,
+      ubicacion: formData.ubicacion,
+      estado: formData.estado,
+      fechaActualizacion: new Date().toISOString().split('T')[0],
+      userId: user?.uid
+    };
+
+    try {
+      if (editingItem) {
+        if (editingItem.id.length > 5) await updateDoc(doc(db, 'inventory', editingItem.id), itemData);
+        const updateList = (items: InventoryItem[]) => items.map(i => i.id === editingItem.id ? { ...itemData, id: i.id } : i);
+        if (inventoryType === 'provincial') setInventoryItems(updateList);
+        else setNationalInventoryItems(updateList);
+      } else {
+        const docRef = await addDoc(collection(db, 'inventory'), itemData);
+        const newItem = { ...itemData, id: docRef.id };
+        if (inventoryType === 'provincial') setInventoryItems(prev => [...prev, newItem]);
+        else setNationalInventoryItems(prev => [...prev, newItem]);
+      }
+      setShowForm(false);
+      setEditingItem(null);
+    } catch (e) { console.error("Error al guardar:", e); }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -461,16 +532,52 @@ function App() {
         {/* Inventory View */}
         {activeMenu === 'inventario' && (
           <div>
+            {/* Formulario de Edición/Creación */}
+            {showForm && (
+              <div className="bg-white p-6 rounded-2xl shadow-lg mb-8 border border-orange-200">
+                <h3 className="text-xl font-bold mb-4 text-slate-900">{editingItem ? '✏️ Editar Item' : '✨ Nuevo Item'}</h3>
+                <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <input type="text" placeholder="Nombre (ej: Martillo)" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="p-3 border rounded-xl" required />
+                  <input type="text" placeholder="Categoría (ej: Herramientas)" value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="p-3 border rounded-xl" required />
+                  <input type="number" placeholder="Cantidad" value={formData.cantidad} onChange={e => setFormData({...formData, cantidad: e.target.value})} className="p-3 border rounded-xl" required />
+                  <input type="text" placeholder="Ubicación" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} className="p-3 border rounded-xl" required />
+                  <select value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value as any})} className="p-3 border rounded-xl">
+                    <option value="Activo">Activo</option>
+                    <option value="Inactivo">Inactivo</option>
+                    <option value="Mantenimiento">Mantenimiento</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button type="submit" className="flex-1 bg-orange-600 text-white font-bold p-3 rounded-xl hover:bg-orange-700 transition">Guardar</button>
+                    <button type="button" onClick={() => setShowForm(false)} className="flex-1 bg-slate-200 text-slate-700 font-bold p-3 rounded-xl hover:bg-slate-300 transition">Cancelar</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             {/* Search and Filter */}
             <div className="flex gap-4 mb-6">
               <input
                 type="text"
-                placeholder="🔍 Buscar por nombre o categoría..."
+                placeholder="🔍 Buscar por nombre..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="flex-1 px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:border-orange-500"
               />
-              <button className="px-6 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="px-4 py-3 rounded-xl border border-slate-300 bg-white font-medium"
+              >
+                <option value="Todas">Todas las categorías</option>
+                <option value="Equipos">Equipos</option>
+                <option value="Periféricos">Periféricos</option>
+                <option value="Herramientas">Herramientas</option>
+                <option value="Infraestructura">Infraestructura</option>
+              </select>
+              <button 
+                onClick={() => { setEditingItem(null); setFormData({nombre:'', categoria:'', cantidad:'', ubicacion:'', estado:'Activo'}); setShowForm(true); }}
+                className="px-6 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition"
+              >
                 ➕ Agregar Item
               </button>
             </div>
@@ -489,7 +596,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentInventory.map((item) => (
+                  {filteredInventory.map((item) => (
                     <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50 transition">
                       <td className="px-6 py-4 font-semibold text-slate-900">{item.nombre}</td>
                       <td className="px-6 py-4 text-slate-600">{item.categoria}</td>
@@ -511,8 +618,8 @@ function App() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button className="text-blue-600 hover:text-blue-800 mr-3">✏️</button>
-                        <button className="text-red-600 hover:text-red-800">🗑️</button>
+                        <button onClick={() => handleEdit(item)} className="text-blue-600 hover:text-blue-800 mr-3">✏️</button>
+                        <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800">🗑️</button>
                       </td>
                     </tr>
                   ))}
