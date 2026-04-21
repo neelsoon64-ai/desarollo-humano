@@ -55,6 +55,7 @@ function App() {
     estado: 'En Stock',
     remito: '',
   });
+  const [viewingRemito, setViewingRemito] = useState<string | null>(null);
   const [reportStatusFilter, setReportStatusFilter] = useState<'En Stock' | 'Sin Stock' | null>(null);
   const [newMemberNombre, setNewMemberNombre] = useState('');
   const [newMemberApellido, setNewMemberApellido] = useState('');
@@ -118,8 +119,11 @@ function App() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Guardamos el nombre del archivo en el campo de remito
-      setFormData({ ...formData, remito: file.name });
+      const reader = new FileReader();
+      reader.onload = () => {
+        setFormData({ ...formData, remito: reader.result as string });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -144,26 +148,47 @@ function App() {
       ubicacion: formData.ubicacion,
       estado: formData.estado,
       fechaActualizacion: new Date().toISOString().split('T')[0],
-      userId: user?.uid,
+      userId: user?.uid || 'user-id-fallback',
       cargadoPor: userFullName,
       remito: formData.remito
     };
 
     try {
+      setLoginLoading(true); // Reutilizamos el estado de carga para el feedback
       if (editingItem) {
+        // Si el ID es largo (de Firebase), actualizamos en la nube
         if (editingItem.id.length > 5) await updateDoc(doc(db, 'inventory', editingItem.id), itemData);
-        const updateList = (items: InventoryItem[]) => items.map(i => i.id === editingItem.id ? { ...itemData, id: i.id } : i);
+        
+        const updateList = (items: InventoryItem[]) => 
+          items.map(i => i.id === editingItem.id ? { ...itemData, id: i.id } : i);
+          
         if (inventoryType === 'provincial') setInventoryItems(updateList);
         else setNationalInventoryItems(updateList);
+        alert("¡Item actualizado con éxito!");
       } else {
-        const docRef = await addDoc(collection(db, 'inventory'), itemData);
-        const newItem = { ...itemData, id: docRef.id };
-        if (inventoryType === 'provincial') setInventoryItems(prev => [...prev, newItem]);
-        else setNationalInventoryItems(prev => [...prev, newItem]);
+        try {
+          const docRef = await addDoc(collection(db, 'inventory'), itemData);
+          const newItem = { ...itemData, id: docRef.id };
+          if (inventoryType === 'provincial') setInventoryItems(prev => [...prev, newItem]);
+          else setNationalInventoryItems(prev => [...prev, newItem]);
+          alert("¡Nuevo item guardado en la base de datos!");
+        } catch (dbError) {
+          // Fallback local si Firebase falla
+          const localId = Math.random().toString(36).substr(2, 9);
+          const newItem = { ...itemData, id: localId };
+          if (inventoryType === 'provincial') setInventoryItems(prev => [...prev, newItem]);
+          else setNationalInventoryItems(prev => [...prev, newItem]);
+          alert("Guardado localmente (Sin conexión a base de datos)");
+        }
       }
       setShowForm(false);
       setEditingItem(null);
-    } catch (e) { console.error("Error al guardar:", e); }
+    } catch (e) { 
+      console.error("Error al guardar:", e);
+      alert("Error al intentar guardar. Revisa la consola para más detalles.");
+    } finally {
+      setLoginLoading(false);
+    }
   };
 
   const handleDeleteMember = (email: string) => {
@@ -709,7 +734,7 @@ function App() {
                       </td>
                       <td className="px-6 py-4">
                         {item.remito ? (
-                          <button onClick={() => alert(`Documento asociado: ${item.remito}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+                          <button onClick={() => setViewingRemito(item.remito || null)} className="flex items-center gap-1 text-blue-600 hover:underline">
                             <span>📄</span> <span className="text-xs">{item.remito}</span>
                           </button>
                         ) : (
@@ -990,6 +1015,40 @@ function App() {
 
               <button className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition">
                 Guardar Cambios
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Modal para ver Remito */}
+        {viewingRemito && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl max-w-3xl w-full p-8 relative shadow-2xl">
+              <button 
+                onClick={() => setViewingRemito(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 text-2xl transition"
+              >
+                ✕
+              </button>
+              <h3 className="text-2xl font-bold mb-6 text-slate-900 flex items-center gap-2">
+                <span>📄</span> Vista Previa del Remito
+              </h3>
+              <div className="bg-slate-100 rounded-2xl p-4 flex items-center justify-center border-2 border-dashed border-slate-200 min-h-[300px]">
+                {viewingRemito.startsWith('data:image') ? (
+                   <img src={viewingRemito} alt="Remito" className="max-h-[60vh] rounded-lg shadow-md object-contain" />
+                ) : (
+                  <div className="text-center p-10">
+                    <span className="text-6xl block mb-4">📝</span>
+                    <p className="text-lg font-bold text-slate-700">Documento Registrado:</p>
+                    <p className="text-xl text-blue-600 mt-2 font-mono bg-white px-4 py-2 rounded-lg shadow-sm">{viewingRemito}</p>
+                  </div>
+                )}
+              </div>
+              <button 
+                onClick={() => setViewingRemito(null)}
+                className="w-full mt-8 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition shadow-lg"
+              >
+                Cerrar Vista
               </button>
             </div>
           </div>
