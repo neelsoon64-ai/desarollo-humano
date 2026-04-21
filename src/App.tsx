@@ -26,6 +26,11 @@ interface FormData {
   estado: 'En Stock' | 'Sin Stock';
 }
 
+interface TeamMember {
+  email: string;
+  role: 'Administrador' | 'Operario';
+}
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,7 +50,10 @@ function App() {
     estado: 'En Stock',
   });
   const [reportStatusFilter, setReportStatusFilter] = useState<'En Stock' | 'Sin Stock' | null>(null);
-  const [teamMembers, setTeamMembers] = useState<string[]>(['admin@chubut.gov.ar']);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
+    { email: 'admin@chubut.gov.ar', role: 'Administrador' }
+  ]);
+  const [newMemberRole, setNewMemberRole] = useState<'Administrador' | 'Operario'>('Operario');
 
   // Estados para el dashboard
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'inventario' | 'reportes' | 'configuracion'>('dashboard');
@@ -67,6 +75,11 @@ function App() {
   ]);
 
   const currentInventory = inventoryType === 'provincial' ? inventoryItems : nationalInventoryItems;
+
+  // Determinar rol del usuario actual
+  const currentUserData = teamMembers.find(m => m.email === user?.email);
+  const isAdmin = currentUserData?.role === 'Administrador' || user?.email === 'admin@chubut.gov.ar';
+  const userRole = isAdmin ? 'Administrador' : 'Operario';
 
   const filteredInventory = currentInventory.filter(item => {
     const matchesSearch = item.nombre.toLowerCase().includes(searchTerm.toLowerCase());
@@ -388,9 +401,9 @@ function App() {
           {[
             { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
             { id: 'inventario', label: '📋 Inventario', icon: '📋' },
-            { id: 'reportes', label: '📈 Reportes', icon: '📈' },
-            { id: 'configuracion', label: '⚙️ Configuración', icon: '⚙️' },
-          ].map((item) => (
+            { id: 'reportes', label: '📈 Reportes', icon: '📈', adminOnly: true },
+            { id: 'configuracion', label: '⚙️ Configuración', icon: '⚙️', adminOnly: true },
+          ].filter(item => !item.adminOnly || isAdmin).map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveMenu(item.id as any)}
@@ -407,7 +420,7 @@ function App() {
 
         <div className="absolute bottom-6 left-6 right-6 pt-6 border-t border-slate-700">
           <p className="text-xs text-slate-400 mb-2">Conectado como</p>
-          <p className="text-sm font-semibold text-white truncate">{user?.email}</p>
+          <p className="text-sm font-semibold text-white truncate">{user?.email} ({userRole})</p>
           <button
             onClick={() => logout()}
             className="w-full mt-4 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-sm"
@@ -622,7 +635,9 @@ function App() {
                       <td className="px-6 py-4 text-xs text-slate-500 italic">{item.cargadoPor || 'Sistema'}</td>
                       <td className="px-6 py-4 text-center">
                         <button onClick={() => handleEdit(item)} className="text-blue-600 hover:text-blue-800 mr-3">✏️</button>
-                        <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800">🗑️</button>
+                        {isAdmin && (
+                          <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800">🗑️</button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -806,11 +821,27 @@ function App() {
               <div className="pt-6 border-t border-slate-200">
                 <h4 className="font-bold text-slate-900 mb-4">👥 Gestión de Equipo</h4>
                 <div className="flex gap-2 mb-4">
-                  <input id="newUserEmail" type="email" placeholder="correo@chubut.gov.ar" className="flex-1 px-4 py-2 rounded-lg border border-slate-300" />
+                  <input 
+                    id="newUserEmail" 
+                    type="email" 
+                    placeholder="correo@chubut.gov.ar" 
+                    className="flex-1 px-4 py-2 rounded-lg border border-slate-300" 
+                  />
+                  <select 
+                    value={newMemberRole} 
+                    onChange={(e) => setNewMemberRole(e.target.value as any)}
+                    className="px-2 py-2 rounded-lg border border-slate-300 bg-white text-sm"
+                  >
+                    <option value="Operario">Operario</option>
+                    <option value="Administrador">Administrador</option>
+                  </select>
                   <button 
                     onClick={() => {
                       const input = document.getElementById('newUserEmail') as HTMLInputElement;
-                      if(input.value) { setTeamMembers([...teamMembers, input.value]); input.value = ''; }
+                      if(input.value) { 
+                        setTeamMembers([...teamMembers, { email: input.value, role: newMemberRole }]); 
+                        input.value = ''; 
+                      }
                     }}
                     className="px-4 py-2 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 transition"
                   >
@@ -820,15 +851,19 @@ function App() {
                 <div className="bg-slate-50 rounded-xl p-4">
                   <p className="text-[10px] font-bold text-slate-500 mb-3 uppercase tracking-wider">Usuarios con acceso</p>
                   <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="font-semibold text-slate-700">{user?.email} (Tú)</span>
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-md uppercase">Administrador</span>
-                    </div>
-                    {teamMembers.map(email => (
-                      <div key={email} className="flex justify-between items-center text-sm">
-                        <span className="text-slate-600">{email}</span>
-                        <span className="px-2 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-md uppercase">Editor</span>
-                      </div>
+                    {teamMembers.map(member => (
+                        <div key={member.email} className="flex justify-between items-center text-sm">
+                          <span className={`${member.email === user?.email ? 'font-semibold text-slate-700' : 'text-slate-600'}`}>
+                            {member.email} {member.email === user?.email && '(Tú)'}
+                          </span>
+                          <span className={`px-2 py-1 text-[10px] font-bold rounded-md uppercase ${
+                            member.role === 'Administrador' 
+                              ? 'bg-blue-100 text-blue-700' 
+                              : 'bg-slate-200 text-slate-600'
+                          }`}>
+                            {member.role}
+                          </span>
+                        </div>
                     ))}
                   </div>
                 </div>
