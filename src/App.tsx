@@ -29,6 +29,7 @@ interface FormData {
 interface TeamMember {
   email: string;
   role: 'Administrador' | 'Operario';
+  password?: string;
 }
 
 function App() {
@@ -50,10 +51,16 @@ function App() {
     estado: 'En Stock',
   });
   const [reportStatusFilter, setReportStatusFilter] = useState<'En Stock' | 'Sin Stock' | null>(null);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
-    { email: 'admin@chubut.gov.ar', role: 'Administrador' }
-  ]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => {
+    const saved = localStorage.getItem('teamMembers');
+    if (saved) return JSON.parse(saved);
+    return [
+      { email: 'admin@chubut.gov.ar', role: 'Administrador' },
+      { email: 'neelsoon64@gmail.com', role: 'Administrador' }
+    ];
+  });
   const [newMemberRole, setNewMemberRole] = useState<'Administrador' | 'Operario'>('Operario');
+  const [newMemberPassword, setNewMemberPassword] = useState('');
 
   // Estados para el dashboard
   const [activeMenu, setActiveMenu] = useState<'dashboard' | 'inventario' | 'reportes' | 'configuracion'>('dashboard');
@@ -78,7 +85,7 @@ function App() {
 
   // Determinar rol del usuario actual
   const currentUserData = teamMembers.find(m => m.email === user?.email);
-  const isAdmin = currentUserData?.role === 'Administrador' || user?.email === 'admin@chubut.gov.ar';
+  const isAdmin = currentUserData?.role === 'Administrador' || user?.email === 'admin@chubut.gov.ar' || user?.email === 'neelsoon64@gmail.com';
   const userRole = isAdmin ? 'Administrador' : 'Operario';
 
   const filteredInventory = currentInventory.filter(item => {
@@ -141,6 +148,21 @@ function App() {
     } catch (e) { console.error("Error al guardar:", e); }
   };
 
+  const handleDeleteMember = (email: string) => {
+    if (email === user?.email) {
+      alert("No puedes eliminar tu propia cuenta de administrador.");
+      return;
+    }
+    if (window.confirm(`¿Estás seguro de eliminar el acceso para ${email}?`)) {
+      setTeamMembers(teamMembers.filter(m => m.email !== email));
+    }
+  };
+
+  // Guardar usuarios automáticamente cuando cambian
+  useEffect(() => {
+    localStorage.setItem('teamMembers', JSON.stringify(teamMembers));
+  }, [teamMembers]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -166,8 +188,20 @@ function App() {
       setEmail('');
       setPassword('');
     } catch (error) {
-      console.error(error);
-      setLoginError('Correo o contraseña incorrectos. Verifica tus datos.');
+      // Si falla Firebase Auth, intentamos validar contra la lista local de teamMembers
+      const localMember = teamMembers.find(
+        (m) => m.email.toLowerCase() === trimmedEmail.toLowerCase() && m.password === password
+      );
+
+      if (localMember) {
+        // Simulamos el inicio de sesión exitoso con los datos del miembro local
+        setUser({ email: localMember.email, uid: `local-${localMember.email}` } as any);
+        setEmail('');
+        setPassword('');
+      } else {
+        console.error(error);
+        setLoginError('Correo o contraseña incorrectos. Verifica tus datos.');
+      }
     } finally {
       setLoginLoading(false);
     }
@@ -312,10 +346,13 @@ function App() {
             <div className="flex justify-center mb-7">
               <div className="w-32 h-32 rounded-2xl bg-white border-2 border-teal-900 border-opacity-16 flex items-center justify-center overflow-hidden shadow-xl">
                 <img
-                  src="https://www.chubut.gov.ar/wp-content/uploads/2023/12/logo-chubut.png"
+                src="https://desarrollohumano.chubut.gov.ar/wp-content/uploads/2024/04/logochubut.png"
                   alt="Logo Gobierno del Chubut"
                   className="w-full h-full object-contain p-2"
-                  onError={(e) => { (e.target as HTMLImageElement).textContent = '🏛️'; }}
+                onError={(e) => { 
+                  (e.target as HTMLImageElement).style.display = 'none';
+                  (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-4xl text-teal-900">🏛️</div>';
+                }}
                 />
               </div>
             </div>
@@ -820,17 +857,24 @@ function App() {
 
               <div className="pt-6 border-t border-slate-200">
                 <h4 className="font-bold text-slate-900 mb-4">👥 Gestión de Equipo</h4>
-                <div className="flex gap-2 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                   <input 
                     id="newUserEmail" 
                     type="email" 
                     placeholder="correo@chubut.gov.ar" 
-                    className="flex-1 px-4 py-2 rounded-lg border border-slate-300" 
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-sm" 
+                  />
+                  <input 
+                    type="password" 
+                    placeholder="Contraseña temporal" 
+                    value={newMemberPassword}
+                    onChange={(e) => setNewMemberPassword(e.target.value)}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-sm" 
                   />
                   <select 
                     value={newMemberRole} 
                     onChange={(e) => setNewMemberRole(e.target.value as any)}
-                    className="px-2 py-2 rounded-lg border border-slate-300 bg-white text-sm"
+                    className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-sm"
                   >
                     <option value="Operario">Operario</option>
                     <option value="Administrador">Administrador</option>
@@ -839,11 +883,12 @@ function App() {
                     onClick={() => {
                       const input = document.getElementById('newUserEmail') as HTMLInputElement;
                       if(input.value) { 
-                        setTeamMembers([...teamMembers, { email: input.value, role: newMemberRole }]); 
-                        input.value = ''; 
+                        setTeamMembers([...teamMembers, { email: input.value, role: newMemberRole, password: newMemberPassword }]); 
+                        input.value = '';
+                        setNewMemberPassword('');
                       }
                     }}
-                    className="px-4 py-2 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 transition"
+                    className="bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 transition py-2"
                   >
                     Añadir
                   </button>
@@ -853,16 +898,24 @@ function App() {
                   <div className="space-y-3">
                     {teamMembers.map(member => (
                         <div key={member.email} className="flex justify-between items-center text-sm">
-                          <span className={`${member.email === user?.email ? 'font-semibold text-slate-700' : 'text-slate-600'}`}>
-                            {member.email} {member.email === user?.email && '(Tú)'}
-                          </span>
-                          <span className={`px-2 py-1 text-[10px] font-bold rounded-md uppercase ${
-                            member.role === 'Administrador' 
-                              ? 'bg-blue-100 text-blue-700' 
-                              : 'bg-slate-200 text-slate-600'
-                          }`}>
-                            {member.role}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className={`${member.email === user?.email ? 'font-semibold text-slate-700' : 'text-slate-600'}`}>
+                              {member.email} {member.email === user?.email && '(Tú)'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">PW: {member.password ? '••••••' : 'Auth Google/Firebase'}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`px-2 py-1 text-[10px] font-bold rounded-md uppercase ${
+                              member.role === 'Administrador' 
+                                ? 'bg-blue-100 text-blue-700' 
+                                : 'bg-slate-200 text-slate-600'
+                            }`}>
+                              {member.role}
+                            </span>
+                            {member.email !== user?.email && (
+                              <button onClick={() => handleDeleteMember(member.email)} className="text-red-500 hover:text-red-700">🗑️</button>
+                            )}
+                          </div>
                         </div>
                     ))}
                   </div>
