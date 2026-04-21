@@ -16,6 +16,7 @@ interface InventoryItem {
   estado: 'En Stock' | 'Sin Stock';
   fechaActualizacion: string;
   cargadoPor?: string;
+  remito?: string;
 }
 
 interface FormData {
@@ -24,11 +25,14 @@ interface FormData {
   cantidad: string;
   ubicacion: string;
   estado: 'En Stock' | 'Sin Stock';
+  remito: string;
 }
 
 interface TeamMember {
   email: string;
   role: 'Administrador' | 'Operario';
+  nombre: string;
+  apellido: string;
   password?: string;
 }
 
@@ -49,14 +53,17 @@ function App() {
     cantidad: '',
     ubicacion: '',
     estado: 'En Stock',
+    remito: '',
   });
   const [reportStatusFilter, setReportStatusFilter] = useState<'En Stock' | 'Sin Stock' | null>(null);
+  const [newMemberNombre, setNewMemberNombre] = useState('');
+  const [newMemberApellido, setNewMemberApellido] = useState('');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => {
     const saved = localStorage.getItem('teamMembers');
     if (saved) return JSON.parse(saved);
     return [
-      { email: 'admin@chubut.gov.ar', role: 'Administrador' },
-      { email: 'neelsoon64@gmail.com', role: 'Administrador' }
+      { email: 'admin@chubut.gov.ar', role: 'Administrador', nombre: 'Admin', apellido: 'Central' },
+      { email: 'neelsoon64@gmail.com', role: 'Administrador', nombre: 'Nelson', apellido: '' }
     ];
   });
   const [newMemberRole, setNewMemberRole] = useState<'Administrador' | 'Operario'>('Operario');
@@ -87,6 +94,7 @@ function App() {
   const currentUserData = teamMembers.find(m => m.email === user?.email);
   const isAdmin = currentUserData?.role === 'Administrador' || user?.email === 'admin@chubut.gov.ar' || user?.email === 'neelsoon64@gmail.com';
   const userRole = isAdmin ? 'Administrador' : 'Operario';
+  const userFullName = currentUserData ? `${currentUserData.nombre} ${currentUserData.apellido}`.trim() : (user?.displayName || user?.email || 'Desconocido');
 
   const filteredInventory = currentInventory.filter(item => {
     const matchesSearch = item.nombre.toLowerCase().includes(searchTerm.toLowerCase());
@@ -101,7 +109,8 @@ function App() {
       categoria: item.categoria,
       cantidad: item.cantidad.toString(),
       ubicacion: item.ubicacion,
-      estado: item.estado
+      estado: item.estado,
+      remito: item.remito || ''
     });
     setShowForm(true);
   };
@@ -128,7 +137,8 @@ function App() {
       estado: formData.estado,
       fechaActualizacion: new Date().toISOString().split('T')[0],
       userId: user?.uid,
-      cargadoPor: user?.email || 'Desconocido'
+      cargadoPor: userFullName,
+      remito: formData.remito
     };
 
     try {
@@ -542,10 +552,12 @@ function App() {
             <div className="bg-white rounded-2xl p-6 shadow-md mb-8">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Acciones Rápidas</h3>
               <div className="grid grid-cols-4 gap-4">
-                <button onClick={() => setActiveMenu('inventario')} className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-orange-500 hover:bg-orange-50 transition">
-                  <span className="text-3xl mb-2">➕</span>
-                  <span className="font-semibold text-sm">Agregar Item</span>
-                </button>
+                {isAdmin && (
+                  <button onClick={() => setActiveMenu('inventario')} className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-orange-500 hover:bg-orange-50 transition">
+                    <span className="text-3xl mb-2">➕</span>
+                    <span className="font-semibold text-sm">Agregar Item</span>
+                  </button>
+                )}
                 <button onClick={exportToExcel} className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50 transition">
                   <span className="text-3xl mb-2">📤</span>
                   <span className="font-semibold text-sm">Exportar</span>
@@ -590,11 +602,18 @@ function App() {
               <div className="bg-white p-6 rounded-2xl shadow-lg mb-8 border border-orange-200">
                 <h3 className="text-xl font-bold mb-4 text-slate-900">{editingItem ? '✏️ Editar Item' : '✨ Nuevo Item'}</h3>
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <input type="text" placeholder="Nombre (ej: Martillo)" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="p-3 border rounded-xl" required />
+                  <div className="relative">
+                    <input type="text" placeholder="Nombre (ej: Martillo)" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full p-3 border rounded-xl pr-10" required />
+                    <button type="button" title="Escanear Producto" className="absolute right-3 top-3 text-slate-400 hover:text-orange-600">📷</button>
+                  </div>
                   <input type="text" placeholder="Categoría (ej: Herramientas)" value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="p-3 border rounded-xl" required />
                   <input type="number" placeholder="Cantidad" value={formData.cantidad} onChange={e => setFormData({...formData, cantidad: e.target.value})} className="p-3 border rounded-xl" required />
                   <input type="text" placeholder="Ubicación" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} className="p-3 border rounded-xl" required />
-                  <select value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value as any})} className="p-3 border rounded-xl">
+                  <div className="relative">
+                    <input type="text" placeholder="N° de Remito / Documento" value={formData.remito} onChange={e => setFormData({...formData, remito: e.target.value})} className="w-full p-3 border rounded-xl pr-10" />
+                    <button type="button" title="Escanear Remito" className="absolute right-3 top-3 text-slate-400 hover:text-blue-600">📷</button>
+                  </div>
+                  <select value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value as any})} className="p-3 border rounded-xl bg-white">
                     <option value="En Stock">En Stock</option>
                     <option value="Sin Stock">Sin Stock</option>
                   </select>
@@ -615,6 +634,11 @@ function App() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="flex-1 px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:border-orange-500"
               />
+              <button 
+                onClick={() => alert("Iniciando escáner de cámara...")}
+                className="px-4 py-3 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300 transition"
+                title="Escanear código de barras"
+              >📷</button>
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
@@ -626,12 +650,14 @@ function App() {
                 <option value="Herramientas">Herramientas</option>
                 <option value="Infraestructura">Infraestructura</option>
               </select>
-              <button 
-                onClick={() => { setEditingItem(null); setFormData({nombre:'', categoria:'', cantidad:'', ubicacion:'', estado:'En Stock'}); setShowForm(true); }}
-                className="px-6 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition"
-              >
-                ➕ Agregar Item
-              </button>
+              {isAdmin && (
+                <button 
+                  onClick={() => { setEditingItem(null); setFormData({nombre:'', categoria:'', cantidad:'', ubicacion:'', estado:'En Stock', remito: ''}); setShowForm(true); }}
+                  className="px-6 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition"
+                >
+                  ➕ Agregar Item
+                </button>
+              )}
             </div>
 
             {/* Inventory Table */}
@@ -644,6 +670,7 @@ function App() {
                     <th className="px-6 py-4 text-center font-bold">Cantidad</th>
                     <th className="px-6 py-4 text-left font-bold">Ubicación</th>
                     <th className="px-6 py-4 text-left font-bold">Estado</th>
+                    <th className="px-6 py-4 text-left font-bold">Remito</th>
                     <th className="px-6 py-4 text-left font-bold">Cargado Por</th>
                     <th className="px-6 py-4 text-center font-bold">Acciones</th>
                   </tr>
@@ -669,11 +696,23 @@ function App() {
                           {item.estado}
                         </span>
                       </td>
+                      <td className="px-6 py-4">
+                        {item.remito ? (
+                          <button onClick={() => alert(`Documento asociado: ${item.remito}`)} className="flex items-center gap-1 text-blue-600 hover:underline">
+                            <span>📄</span> <span className="text-xs">{item.remito}</span>
+                          </button>
+                        ) : (
+                          <span className="text-slate-300 text-xs">-</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-xs text-slate-500 italic">{item.cargadoPor || 'Sistema'}</td>
                       <td className="px-6 py-4 text-center">
-                        <button onClick={() => handleEdit(item)} className="text-blue-600 hover:text-blue-800 mr-3">✏️</button>
+                        <button onClick={() => alert(`Detalles del Item:\nNombre: ${item.nombre}\nRemito: ${item.remito || 'Sin remito'}\nFecha: ${item.fechaActualizacion}\nCargado por: ${item.cargadoPor}`)} className="text-slate-500 hover:text-slate-800 mr-3" title="Ver Detalles">👁️</button>
                         {isAdmin && (
-                          <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800">🗑️</button>
+                          <button onClick={() => handleEdit(item)} className="text-blue-600 hover:text-blue-800 mr-3" title="Editar">✏️</button>
+                        )}
+                        {isAdmin && (
+                          <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800" title="Borrar">🗑️</button>
                         )}
                       </td>
                     </tr>
@@ -859,6 +898,20 @@ function App() {
                 <h4 className="font-bold text-slate-900 mb-4">👥 Gestión de Equipo</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                   <input 
+                    type="text" 
+                    placeholder="Nombre" 
+                    value={newMemberNombre}
+                    onChange={(e) => setNewMemberNombre(e.target.value)}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-sm" 
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Apellido" 
+                    value={newMemberApellido}
+                    onChange={(e) => setNewMemberApellido(e.target.value)}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-sm" 
+                  />
+                  <input 
                     id="newUserEmail" 
                     type="email" 
                     placeholder="correo@chubut.gov.ar" 
@@ -882,10 +935,12 @@ function App() {
                   <button 
                     onClick={() => {
                       const input = document.getElementById('newUserEmail') as HTMLInputElement;
-                      if(input.value) { 
-                        setTeamMembers([...teamMembers, { email: input.value, role: newMemberRole, password: newMemberPassword }]); 
+                      if(input.value && newMemberNombre) { 
+                        setTeamMembers([...teamMembers, { email: input.value, role: newMemberRole, password: newMemberPassword, nombre: newMemberNombre, apellido: newMemberApellido }]); 
                         input.value = '';
                         setNewMemberPassword('');
+                        setNewMemberNombre('');
+                        setNewMemberApellido('');
                       }
                     }}
                     className="bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 transition py-2"
@@ -900,7 +955,7 @@ function App() {
                         <div key={member.email} className="flex justify-between items-center text-sm">
                           <div className="flex flex-col">
                             <span className={`${member.email === user?.email ? 'font-semibold text-slate-700' : 'text-slate-600'}`}>
-                              {member.email} {member.email === user?.email && '(Tú)'}
+                              {member.nombre} {member.apellido} ({member.email}) {member.email === user?.email && '(Tú)'}
                             </span>
                             <span className="text-[10px] text-slate-400">PW: {member.password ? '••••••' : 'Auth Google/Firebase'}</span>
                           </div>
