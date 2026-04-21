@@ -2,8 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  background-color: #F0F4F7;
-  font-family: sans-serif;
+@layer base {
+  body {
+    margin: 0;
+    background-color: #F0F4F7;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer utilities {
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
 }

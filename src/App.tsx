@@ -1,6 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, loginWithGoogle, loginWithEmailPassword, logout } from './firebase';
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import jsPDF from 'jspdf';
+import * as XLSX from 'xlsx';
+import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
+import { db } from './firebase';
+
+interface InventoryItem {
+  id: string;
+  nombre: string;
+  categoria: string;
+  cantidad: number;
+  ubicacion: string;
+  estado: 'Activo' | 'Inactivo' | 'Mantenimiento';
+  fechaActualizacion: string;
+}
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -9,6 +24,26 @@ function App() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  
+  // Estados para el dashboard
+  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'inventario' | 'reportes' | 'configuracion'>('dashboard');
+  const [inventoryType, setInventoryType] = useState<'provincial' | 'nacional'>('provincial');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([
+    { id: '1', nombre: 'Laptop Dell', categoria: 'Equipos', cantidad: 5, ubicacion: 'Oficina A', estado: 'Activo', fechaActualizacion: '2026-04-15' },
+    { id: '2', nombre: 'Mouse Inalámbrico', categoria: 'Periféricos', cantidad: 12, ubicacion: 'Almacén', estado: 'Activo', fechaActualizacion: '2026-04-10' },
+    { id: '3', nombre: 'Monitor LG 24"', categoria: 'Equipos', cantidad: 3, ubicacion: 'Oficina B', estado: 'Mantenimiento', fechaActualizacion: '2026-04-01' },
+    { id: '4', nombre: 'Teclado Mecánico', categoria: 'Periféricos', cantidad: 1, ubicacion: 'Almacén', estado: 'Activo', fechaActualizacion: '2026-03-28' },
+  ]);
+  const [nationalInventoryItems, setNationalInventoryItems] = useState<InventoryItem[]>([
+    { id: '101', nombre: 'Servidores', categoria: 'Infraestructura', cantidad: 8, ubicacion: 'Data Center', estado: 'Activo', fechaActualizacion: '2026-04-18' },
+    { id: '102', nombre: 'Switches Red', categoria: 'Equipos Red', cantidad: 15, ubicacion: 'Central', estado: 'Activo', fechaActualizacion: '2026-04-12' },
+    { id: '103', nombre: 'Cables Ethernet', categoria: 'Periféricos', cantidad: 50, ubicacion: 'Almacén Central', estado: 'Activo', fechaActualizacion: '2026-04-15' },
+    { id: '104', nombre: 'Router Cisco', categoria: 'Equipos Red', cantidad: 6, ubicacion: 'Central', estado: 'Activo', fechaActualizacion: '2026-04-10' },
+    { id: '105', nombre: 'Impresoras Multifunción', categoria: 'Equipos', cantidad: 4, ubicacion: 'Oficinas', estado: 'Mantenimiento', fechaActualizacion: '2026-03-25' },
+  ]);
+
+  const currentInventory = inventoryType === 'provincial' ? inventoryItems : nationalInventoryItems;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -55,12 +90,118 @@ function App() {
     }
   };
 
+  // Cargar inventario desde Firebase
+  useEffect(() => {
+    if (user) {
+      loadInventoryFromFirebase();
+    }
+  }, [user]);
+
+  const loadInventoryFromFirebase = async () => {
+    try {
+      const q = query(collection(db, 'inventory'), where('userId', '==', user?.uid));
+      const querySnapshot = await getDocs(q);
+      const items: InventoryItem[] = [];
+      querySnapshot.forEach((doc) => {
+        items.push({ id: doc.id, ...doc.data() } as InventoryItem);
+      });
+      if (items.length > 0) {
+        setInventoryItems(items);
+      }
+    } catch (error) {
+      console.error('Error cargando inventario:', error);
+    }
+  };
+
+  // Funciones de exportación
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    let yPosition = 20;
+
+    doc.setFontSize(16);
+    doc.text(`Reporte de Inventario ${inventoryType === 'provincial' ? 'Provincial' : 'Nacional'}`, 20, yPosition);
+    yPosition += 10;
+
+    doc.setFontSize(10);
+    doc.text(`Generado: ${new Date().toLocaleDateString('es-ES')}`, 20, yPosition);
+    doc.text(`Usuario: ${user?.email || ''}`, 20, yPosition + 5);
+    yPosition += 20;
+
+    // Encabezados
+    doc.setFontSize(11);
+    doc.text('Nombre', 20, yPosition);
+    doc.text('Categoría', 80, yPosition);
+    doc.text('Cantidad', 130, yPosition);
+    doc.text('Estado', 160, yPosition);
+    yPosition += 7;
+
+    // Datos
+    doc.setFontSize(9);
+    currentInventory.forEach(item => {
+      if (yPosition > 270) {
+        doc.addPage();
+        yPosition = 20;
+      }
+      doc.text(item.nombre.substring(0, 30), 20, yPosition);
+      doc.text(item.categoria, 80, yPosition);
+      doc.text(item.cantidad.toString(), 130, yPosition);
+      doc.text(item.estado, 160, yPosition);
+      yPosition += 7;
+    });
+
+    doc.save(`inventario-${inventoryType}-reporte.pdf`);
+  };
+
+  const exportToExcel = () => {
+    const worksheetData = [
+      [`Reporte de Inventario ${inventoryType === 'provincial' ? 'Provincial' : 'Nacional'}`],
+      [`Generado: ${new Date().toLocaleDateString('es-ES')}`],
+      [`Usuario: ${user?.email}`],
+      [],
+      ['Nombre', 'Categoría', 'Cantidad', 'Ubicación', 'Estado', 'Fecha Actualización'],
+      ...currentInventory.map(item => [
+        item.nombre,
+        item.categoria,
+        item.cantidad,
+        item.ubicacion,
+        item.estado,
+        item.fechaActualizacion
+      ])
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventario');
+    XLSX.writeFile(workbook, `inventario-${inventoryType}-reporte.xlsx`);
+  };
+
+  // Datos para gráficos
+  const getChartData = () => {
+    const categoriesCounts = currentInventory.reduce((acc, item) => {
+      const existing = acc.find(c => c.name === item.categoria);
+      if (existing) {
+        existing.cantidad += item.cantidad;
+      } else {
+        acc.push({ name: item.categoria, cantidad: item.cantidad });
+      }
+      return acc;
+    }, [] as { name: string; cantidad: number }[]);
+
+    const estadoCounts = [
+      { name: 'Activo', value: currentInventory.filter(i => i.estado === 'Activo').length },
+      { name: 'Inactivo', value: currentInventory.filter(i => i.estado === 'Inactivo').length },
+      { name: 'Mantenimiento', value: currentInventory.filter(i => i.estado === 'Mantenimiento').length }
+    ];
+
+    return { categoriesCounts, estadoCounts };
+  };
+
   if (loading) {
     return (
-      <div style={{minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #F0F4F7 0%, #D1E7DD 100%)', color: '#2C5F78', fontFamily: 'Inter, sans-serif'}}>
-        <div style={{textAlign: 'center'}}>
-          <div style={{width: '60px', height: '60px', border: '6px solid #d9e6f1', borderTopColor: '#2C5F78', borderRadius: '50%', margin: '0 auto 20px', animation: 'spin 1s linear infinite'}} />
-          <p style={{fontSize: '18px', fontWeight: 700}}>Cargando sistema...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-blue-100 to-emerald-200 text-teal-900 font-sans">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-200 border-t-teal-900 rounded-full mx-auto mb-5 spinner" />
+          <p className="text-lg font-bold">Cargando sistema...</p>
         </div>
       </div>
     );
@@ -68,81 +209,81 @@ function App() {
 
   if (!user) {
     return (
-      <div style={{minHeight: '100vh', background: 'linear-gradient(140deg, #F0F4F7 0%, #E8F4FD 50%, #D1E7DD 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: 'Inter, sans-serif'}}>
-        <div style={{position: 'relative', width: '100%', maxWidth: '520px'}}>
-          <div style={{position: 'absolute', top: '-40px', right: '-40px', width: '140px', height: '140px', borderRadius: '50%', background: '#2C5F78', opacity: 0.14}} />
-          <div style={{position: 'absolute', bottom: '-40px', left: '-40px', width: '180px', height: '180px', borderRadius: '50%', background: '#FF6B00', opacity: 0.12}} />
-          <div style={{background: 'rgba(255,255,255,0.95)', borderRadius: '32px', padding: '36px', boxShadow: '0 36px 80px rgba(42, 71, 96, 0.14)', border: '1px solid rgba(255,255,255,0.9)', position: 'relative', zIndex: 1}}>
-            <div style={{display: 'flex', justifyContent: 'center', marginBottom: '28px'}}>
-              <div style={{width: '120px', height: '120px', borderRadius: '32px', background: '#fff', border: '2px solid rgba(44,95,120,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: '0 18px 40px rgba(44,95,120,0.12)'}}>
+      <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-emerald-200 flex items-center justify-center p-6 font-sans">
+        <div className="relative w-full max-w-sm">
+          <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-teal-900 opacity-14" />
+          <div className="absolute -bottom-10 -left-10 w-48 h-48 rounded-full bg-orange-600 opacity-12" />
+          <div className="relative bg-white bg-opacity-95 rounded-3xl p-9 shadow-2xl border border-white border-opacity-90 z-10">
+            <div className="flex justify-center mb-7">
+              <div className="w-32 h-32 rounded-2xl bg-white border-2 border-teal-900 border-opacity-16 flex items-center justify-center overflow-hidden shadow-xl">
                 <img
-                  src="/logochubut.png"
+                  src="https://www.chubut.gov.ar/wp-content/uploads/2023/12/logo-chubut.png"
                   alt="Logo Gobierno del Chubut"
-                  style={{width: '100%', height: '100%', objectFit: 'contain'}}
-                  onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.chubut.gov.ar/wp-content/uploads/2023/12/logo-chubut.png'; }}
+                  className="w-full h-full object-contain p-2"
+                  onError={(e) => { (e.target as HTMLImageElement).textContent = '🏛️'; }}
                 />
               </div>
             </div>
 
-            <div style={{textAlign: 'center', marginBottom: '32px'}}>
-              <p style={{margin: 0, color: '#2C5F78', fontWeight: 700, letterSpacing: '0.16em', fontSize: '12px', textTransform: 'uppercase'}}>Gobierno del Chubut</p>
-              <h1 style={{marginTop: '12px', marginBottom: '10px', fontSize: '32px', lineHeight: 1.05, color: '#102A43'}}>Ministerio de Desarrollo Humano</h1>
-              <p style={{margin: 0, color: '#4B6478', fontSize: '15px'}}>Sistema de Inventario institucional con acceso seguro.</p>
+            <div className="text-center mb-8">
+              <p className="m-0 text-teal-900 font-bold text-xs tracking-wider uppercase">Gobierno del Chubut</p>
+              <h1 className="mt-3 mb-2.5 text-4xl leading-tight text-slate-900">Ministerio de Desarrollo Humano</h1>
+              <p className="m-0 text-blue-700 text-base">Sistema de Inventario institucional con acceso seguro.</p>
             </div>
 
-            <form onSubmit={handleEmailLogin} style={{display: 'grid', gap: '18px'}}>
-              <div style={{textAlign: 'left'}}>
-                <label htmlFor="email" style={{display: 'block', fontWeight: 700, marginBottom: '8px', color: '#2C5F78'}}>Correo electrónico</label>
+            <form onSubmit={handleEmailLogin} className="grid gap-4.5">
+              <div className="text-left">
+                <label htmlFor="email" className="block font-bold mb-2 text-teal-900 text-sm">Correo electrónico</label>
                 <input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="usuario@chubut.gov.ar"
-                  style={{width: '100%', padding: '16px 18px', borderRadius: '16px', border: '1px solid #CBD5E1', fontSize: '15px', color: '#102A43', background: '#F8FAFC'}}
+                  className="w-full px-4.5 py-4 rounded-2xl border border-slate-300 text-base text-slate-900 bg-slate-50"
                 />
               </div>
 
-              <div style={{textAlign: 'left'}}>
-                <label htmlFor="password" style={{display: 'block', fontWeight: 700, marginBottom: '8px', color: '#2C5F78'}}>Contraseña</label>
+              <div className="text-left">
+                <label htmlFor="password" className="block font-bold mb-2 text-teal-900 text-sm">Contraseña</label>
                 <input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  style={{width: '100%', padding: '16px 18px', borderRadius: '16px', border: '1px solid #CBD5E1', fontSize: '15px', color: '#102A43', background: '#F8FAFC'}}
+                  className="w-full px-4.5 py-4 rounded-2xl border border-slate-300 text-base text-slate-900 bg-slate-50"
                 />
               </div>
 
               {loginError && (
-                <div style={{background: '#FEE2E2', color: '#991B1B', borderRadius: '16px', padding: '12px 16px', fontSize: '14px'}}>{loginError}</div>
+                <div className="bg-red-100 text-red-900 rounded-2xl p-4 text-sm">{loginError}</div>
               )}
 
               <button
                 type="submit"
                 disabled={loginLoading}
-                style={{width: '100%', padding: '16px 18px', borderRadius: '16px', border: 'none', background: '#FF6B00', color: '#fff', fontWeight: 700, fontSize: '16px', cursor: 'pointer', boxShadow: '0 18px 30px rgba(255,107,0,0.24)'}}
+                className="w-full py-4 px-4.5 rounded-2xl border-none bg-orange-600 text-white font-bold text-base cursor-pointer shadow-xl hover:bg-orange-700 disabled:opacity-70"
               >
                 {loginLoading ? 'Ingresando...' : 'Iniciar sesión'}
               </button>
             </form>
 
-            <div style={{display: 'flex', alignItems: 'center', gap: '12px', margin: '26px 0', color: '#64748B'}}>
-              <div style={{flex: 1, height: '1px', background: '#CBD5E1'}} />
-              <span style={{fontSize: '14px'}}>o</span>
-              <div style={{flex: 1, height: '1px', background: '#CBD5E1'}} />
+            <div className="flex items-center gap-3 my-6.5 text-slate-500">
+              <div className="flex-1 h-px bg-slate-300" />
+              <span className="text-sm">o</span>
+              <div className="flex-1 h-px bg-slate-300" />
             </div>
 
             <button
               onClick={handleGoogleLogin}
               disabled={loginLoading}
-              style={{width: '100%', padding: '16px 18px', borderRadius: '16px', border: '1px solid #CBD5E1', background: '#ffffff', color: '#2C5F78', fontWeight: 700, fontSize: '16px', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '10px'}}
+              className="w-full py-4 px-4.5 rounded-2xl border border-slate-300 bg-white text-teal-900 font-bold text-base cursor-pointer flex justify-center gap-2.5 hover:bg-slate-50 disabled:opacity-70"
             >
               {loginLoading ? 'Ingresando...' : 'Ingresar con Google'}
             </button>
 
-            <p style={{marginTop: '24px', color: '#64748B', fontSize: '13px', textAlign: 'center'}}>Si el login no funciona, revisa tus credenciales en Firebase Authentication o usa la opción de Google.</p>
+            <p className="mt-6 text-slate-500 text-xs text-center">Si el login no funciona, revisa tus credenciales en Firebase Authentication o usa la opción de Google.</p>
           </div>
         </div>
       </div>
@@ -150,29 +291,388 @@ function App() {
   }
 
   return (
-    <div style={{minHeight: '100vh', background: '#F0F4F7', fontFamily: 'Inter, sans-serif', color: '#102A43', padding: '24px'}}>
-      <div style={{maxWidth: '1024px', margin: '0 auto'}}>
-        <header style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '18px', background: '#ffffff', padding: '18px 24px', borderRadius: '24px', boxShadow: '0 20px 60px rgba(44,95,120,0.08)'}}>
-          <div style={{display: 'flex', alignItems: 'center', gap: '14px'}}>
-            <div style={{width: '60px', height: '60px', borderRadius: '18px', background: '#fff', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-              <img src="/logochubut.png" alt="Logo Chubut" style={{width: '100%', height: '100%', objectFit: 'contain'}} />
-            </div>
-            <div>
-              <p style={{margin: 0, fontSize: '12px', fontWeight: 700, color: '#2C5F78', letterSpacing: '0.16em', textTransform: 'uppercase'}}>Gobierno del Chubut</p>
-              <h1 style={{margin: '6px 0 0', fontSize: '22px', fontWeight: 900}}>Bienvenido al Sistema</h1>
-            </div>
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+      {/* Sidebar */}
+      <div className="fixed left-0 top-0 w-64 h-screen bg-slate-900 text-white p-6 shadow-xl">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-12 h-12 rounded-lg bg-orange-600 flex items-center justify-center font-bold text-lg">📦</div>
+          <div>
+            <h2 className="font-bold text-lg">InventarioApp</h2>
+            <p className="text-xs text-slate-400">Sistema de Control</p>
           </div>
+        </div>
+
+        <nav className="space-y-2">
+          {[
+            { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
+            { id: 'inventario', label: '📋 Inventario', icon: '📋' },
+            { id: 'reportes', label: '📈 Reportes', icon: '📈' },
+            { id: 'configuracion', label: '⚙️ Configuración', icon: '⚙️' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveMenu(item.id as any)}
+              className={`w-full text-left px-4 py-3 rounded-lg transition ${
+                activeMenu === item.id
+                  ? 'bg-orange-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="absolute bottom-6 left-6 right-6 pt-6 border-t border-slate-700">
+          <p className="text-xs text-slate-400 mb-2">Conectado como</p>
+          <p className="text-sm font-semibold text-white truncate">{user?.email}</p>
           <button
             onClick={() => logout()}
-            style={{padding: '12px 18px', borderRadius: '14px', border: 'none', background: '#2C5F78', color: '#fff', fontWeight: 700, cursor: 'pointer'}}
+            className="w-full mt-4 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-sm"
           >
             Cerrar sesión
           </button>
-        </header>
+        </div>
+      </div>
 
-        <main style={{marginTop: '28px', background: '#fff', borderRadius: '30px', padding: '30px', boxShadow: '0 20px 60px rgba(44,95,120,0.08)'}}>
-          <p style={{margin: 0, fontSize: '16px', color: '#334155'}}>Has iniciado sesión como <strong>{user.email}</strong>.</p>
-        </main>
+      {/* Main Content */}
+      <div className="ml-64 p-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <p className="text-sm text-orange-600 font-bold uppercase mb-1">Ministerio de Desarrollo Humano</p>
+            <h1 className="text-3xl font-bold text-slate-900">
+              {activeMenu === 'dashboard' && 'Panel de Control'}
+              {activeMenu === 'inventario' && 'Gestión de Inventario'}
+              {activeMenu === 'reportes' && 'Reportes'}
+              {activeMenu === 'configuracion' && 'Configuración'}
+            </h1>
+            <p className="text-slate-600 mt-1">Inventario {inventoryType === 'provincial' ? 'Provincial' : 'Nacional'}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-slate-600">Hoy</p>
+            <p className="text-lg font-bold text-slate-900">{new Date().toLocaleDateString('es-ES')}</p>
+          </div>
+        </div>
+
+        {/* Selector de Tipo de Inventario */}
+        <div className="flex gap-4 mb-6">
+          <button
+            onClick={() => setInventoryType('provincial')}
+            className={`px-6 py-3 rounded-xl font-bold transition ${
+              inventoryType === 'provincial'
+                ? 'bg-orange-600 text-white shadow-lg'
+                : 'bg-white text-slate-900 border-2 border-slate-200 hover:border-orange-600'
+            }`}
+          >
+            📍 Inventario Provincial
+          </button>
+          <button
+            onClick={() => setInventoryType('nacional')}
+            className={`px-6 py-3 rounded-xl font-bold transition ${
+              inventoryType === 'nacional'
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'bg-white text-slate-900 border-2 border-slate-200 hover:border-blue-600'
+            }`}
+          >
+            🌍 Inventario Nacional
+          </button>
+        </div>
+
+        {/* Dashboard View */}
+        {activeMenu === 'dashboard' && (
+          <div>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-4 gap-6 mb-8">
+              <div className="bg-white rounded-2xl p-6 shadow-md hover:shadow-lg transition">
+                <p className="text-slate-600 text-sm font-semibold uppercase">Total de Items</p>
+                <p className="text-4xl font-bold text-slate-900 mt-2">{currentInventory.length}</p>
+                <p className="text-xs text-slate-500 mt-2">+2 esta semana</p>
+              </div>
+              <div className="bg-white rounded-2xl p-6 shadow-md hover:shadow-lg transition border-l-4 border-orange-500">
+                <p className="text-slate-600 text-sm font-semibold uppercase">Stock Bajo</p>
+                <p className="text-4xl font-bold text-orange-600 mt-2">{currentInventory.filter(i => i.cantidad <= 3).length}</p>
+                <p className="text-xs text-slate-500 mt-2">Requiere atención</p>
+              </div>
+              <div className="bg-white rounded-2xl p-6 shadow-md hover:shadow-lg transition border-l-4 border-green-500">
+                <p className="text-slate-600 text-sm font-semibold uppercase">Activos</p>
+                <p className="text-4xl font-bold text-green-600 mt-2">{currentInventory.filter(i => i.estado === 'Activo').length}</p>
+                <p className="text-xs text-slate-500 mt-2">En funcionamiento</p>
+              </div>
+              <div className="bg-white rounded-2xl p-6 shadow-md hover:shadow-lg transition border-l-4 border-blue-500">
+                <p className="text-slate-600 text-sm font-semibold uppercase">Categorías</p>
+                <p className="text-4xl font-bold text-blue-600 mt-2">{new Set(currentInventory.map(i => i.categoria)).size}</p>
+                <p className="text-xs text-slate-500 mt-2">Diferentes tipos</p>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-2xl p-6 shadow-md mb-8">
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Acciones Rápidas</h3>
+              <div className="grid grid-cols-4 gap-4">
+                <button onClick={() => setActiveMenu('inventario')} className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-orange-500 hover:bg-orange-50 transition">
+                  <span className="text-3xl mb-2">➕</span>
+                  <span className="font-semibold text-sm">Agregar Item</span>
+                </button>
+                <button onClick={exportToExcel} className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50 transition">
+                  <span className="text-3xl mb-2">📤</span>
+                  <span className="font-semibold text-sm">Exportar</span>
+                </button>
+                <button onClick={() => setActiveMenu('reportes')} className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-green-500 hover:bg-green-50 transition">
+                  <span className="text-3xl mb-2">📊</span>
+                  <span className="font-semibold text-sm">Reportes</span>
+                </button>
+                <button onClick={() => setActiveMenu('configuracion')} className="flex flex-col items-center justify-center p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-purple-500 hover:bg-purple-50 transition">
+                  <span className="text-3xl mb-2">⚙️</span>
+                  <span className="font-semibold text-sm">Configurar</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Recent Items */}
+            <div className="bg-white rounded-2xl p-6 shadow-md">
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Últimas Actualizaciones</h3>
+              <div className="space-y-3">
+                {currentInventory.slice(0, 3).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between p-4 rounded-lg bg-slate-50 hover:bg-slate-100 transition">
+                    <div>
+                      <p className="font-semibold text-slate-900">{item.nombre}</p>
+                      <p className="text-xs text-slate-600">{item.categoria} • {item.ubicacion}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-slate-900">{item.cantidad}</p>
+                      <p className="text-xs text-slate-500">{item.fechaActualizacion}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inventory View */}
+        {activeMenu === 'inventario' && (
+          <div>
+            {/* Search and Filter */}
+            <div className="flex gap-4 mb-6">
+              <input
+                type="text"
+                placeholder="🔍 Buscar por nombre o categoría..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1 px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:border-orange-500"
+              />
+              <button className="px-6 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition">
+                ➕ Agregar Item
+              </button>
+            </div>
+
+            {/* Inventory Table */}
+            <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-slate-900 text-white">
+                  <tr>
+                    <th className="px-6 py-4 text-left font-bold">Nombre</th>
+                    <th className="px-6 py-4 text-left font-bold">Categoría</th>
+                    <th className="px-6 py-4 text-center font-bold">Cantidad</th>
+                    <th className="px-6 py-4 text-left font-bold">Ubicación</th>
+                    <th className="px-6 py-4 text-left font-bold">Estado</th>
+                    <th className="px-6 py-4 text-center font-bold">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentInventory.map((item) => (
+                    <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50 transition">
+                      <td className="px-6 py-4 font-semibold text-slate-900">{item.nombre}</td>
+                      <td className="px-6 py-4 text-slate-600">{item.categoria}</td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`inline-block px-3 py-1 rounded-full font-bold ${
+                          item.cantidad <= 3 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                        }`}>
+                          {item.cantidad}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">{item.ubicacion}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
+                          item.estado === 'Activo' ? 'bg-green-100 text-green-800' :
+                          item.estado === 'Inactivo' ? 'bg-slate-100 text-slate-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {item.estado}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button className="text-blue-600 hover:text-blue-800 mr-3">✏️</button>
+                        <button className="text-red-600 hover:text-red-800">🗑️</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Reportes View */}
+        {activeMenu === 'reportes' && (
+          <div>
+            {/* Botones de Exportación */}
+            <div className="flex gap-4 mb-6">
+              <button
+                onClick={exportToPDF}
+                className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition"
+              >
+                📄 Exportar PDF
+              </button>
+              <button
+                onClick={exportToExcel}
+                className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition"
+              >
+                📊 Exportar Excel
+              </button>
+            </div>
+
+            {/* Gráficos */}
+            <div className="grid grid-cols-2 gap-6 mb-6">
+              {/* Gráfico de Barras - Categorías */}
+              <div className="bg-white rounded-2xl p-6 shadow-md">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Cantidad por Categoría</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={getChartData().categoriesCounts}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="cantidad" fill="#FF6B00" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Gráfico de Pastel - Estado */}
+              <div className="bg-white rounded-2xl p-6 shadow-md">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Distribución por Estado</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={getChartData().estadoCounts}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => `${name}: ${value}`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      <Cell fill="#10B981" />
+                      <Cell fill="#EF4444" />
+                      <Cell fill="#F59E0B" />
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Estadísticas Detalladas */}
+            <div className="grid grid-cols-3 gap-6">
+              <div className="bg-white rounded-2xl p-6 shadow-md">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Reporte de Stock</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">Items en Stock</span>
+                    <span className="text-2xl font-bold text-green-600">{currentInventory.filter(i => i.cantidad > 5).length}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">Stock Medio</span>
+                    <span className="text-2xl font-bold text-yellow-600">{currentInventory.filter(i => i.cantidad > 3 && i.cantidad <= 5).length}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">Stock Bajo</span>
+                    <span className="text-2xl font-bold text-red-600">{currentInventory.filter(i => i.cantidad <= 3).length}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 shadow-md">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Reporte por Estado</h3>
+                <div className="space-y-3">
+                  {['Activo', 'Inactivo', 'Mantenimiento'].map((estado) => (
+                    <div key={estado} className="flex justify-between items-center">
+                      <span className="text-slate-600">{estado}</span>
+                      <span className="text-2xl font-bold text-slate-900">{currentInventory.filter(i => i.estado === estado).length}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 shadow-md">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Resumen General</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">Total Items</span>
+                    <span className="text-2xl font-bold text-blue-600">{currentInventory.length}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">Categorías</span>
+                    <span className="text-2xl font-bold text-purple-600">{new Set(currentInventory.map(i => i.categoria)).size}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">Ubicaciones</span>
+                    <span className="text-2xl font-bold text-indigo-600">{new Set(currentInventory.map(i => i.ubicacion)).size}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Configuración View */}
+        {activeMenu === 'configuracion' && (
+          <div className="bg-white rounded-2xl p-6 shadow-md max-w-2xl">
+            <h3 className="text-lg font-bold text-slate-900 mb-6">Configuración del Sistema</h3>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="block font-semibold text-slate-900 mb-2">Nombre de Organización</label>
+                <input 
+                  type="text" 
+                  placeholder="Nombre de organización"
+                  defaultValue="Ministerio de Desarrollo Humano" 
+                  className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-orange-500" 
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-900 mb-2">Email de Contacto</label>
+                <input 
+                  type="email" 
+                  placeholder="correo@ejemplo.com"
+                  defaultValue={user?.email || ''} 
+                  className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:border-orange-500" 
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-900 mb-2">Notificaciones</label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input type="checkbox" defaultChecked className="mr-2" />
+                    <span className="text-slate-700">Alertas de stock bajo</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input type="checkbox" defaultChecked className="mr-2" />
+                    <span className="text-slate-700">Reportes semanales</span>
+                  </label>
+                </div>
+              </div>
+
+              <button className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition">
+                Guardar Cambios
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
