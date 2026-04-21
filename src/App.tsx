@@ -115,6 +115,14 @@ function App() {
     setShowForm(true);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Guardamos el nombre del archivo en el campo de remito
+      setFormData({ ...formData, remito: file.name });
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (window.confirm('¿Estás seguro de eliminar este elemento?')) {
       try {
@@ -610,8 +618,11 @@ function App() {
                   <input type="number" placeholder="Cantidad" value={formData.cantidad} onChange={e => setFormData({...formData, cantidad: e.target.value})} className="p-3 border rounded-xl" required />
                   <input type="text" placeholder="Ubicación" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} className="p-3 border rounded-xl" required />
                   <div className="relative">
-                    <input type="text" placeholder="N° de Remito / Documento" value={formData.remito} onChange={e => setFormData({...formData, remito: e.target.value})} className="w-full p-3 border rounded-xl pr-10" />
-                    <button type="button" title="Escanear Remito" className="absolute right-3 top-3 text-slate-400 hover:text-blue-600">📷</button>
+                    <input type="text" placeholder="N° de Remito o cargar archivo" value={formData.remito} onChange={e => setFormData({...formData, remito: e.target.value})} className="w-full p-3 border rounded-xl pr-10" />
+                    <label className="absolute right-3 top-3 cursor-pointer text-slate-400 hover:text-blue-600" title="Cargar documento o foto">
+                      📷
+                      <input type="file" className="hidden" onChange={handleFileChange} accept="image/*,.pdf" />
+                    </label>
                   </div>
                   <select value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value as any})} className="p-3 border rounded-xl bg-white">
                     <option value="En Stock">En Stock</option>
