@@ -13,7 +13,7 @@ interface InventoryItem {
   categoria: string;
   cantidad: number;
   ubicacion: string;
-  estado: 'Activo' | 'Inactivo' | 'Mantenimiento';
+  estado: 'En Stock' | 'Sin Stock';
   fechaActualizacion: string;
 }
 
@@ -22,7 +22,7 @@ interface FormData {
   categoria: string;
   cantidad: string;
   ubicacion: string;
-  estado: 'Activo' | 'Inactivo' | 'Mantenimiento';
+  estado: 'En Stock' | 'Sin Stock';
 }
 
 function App() {
@@ -41,7 +41,7 @@ function App() {
     categoria: '',
     cantidad: '',
     ubicacion: '',
-    estado: 'Activo',
+    estado: 'En Stock',
   });
 
   // Estados para el dashboard
@@ -50,17 +50,17 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([
-    { id: '1', nombre: 'Laptop Dell', categoria: 'Equipos', cantidad: 5, ubicacion: 'Oficina A', estado: 'Activo', fechaActualizacion: '2026-04-15' },
-    { id: '2', nombre: 'Mouse Inalámbrico', categoria: 'Periféricos', cantidad: 12, ubicacion: 'Almacén', estado: 'Activo', fechaActualizacion: '2026-04-10' },
-    { id: '3', nombre: 'Monitor LG 24"', categoria: 'Equipos', cantidad: 3, ubicacion: 'Oficina B', estado: 'Mantenimiento', fechaActualizacion: '2026-04-01' },
-    { id: '4', nombre: 'Teclado Mecánico', categoria: 'Periféricos', cantidad: 1, ubicacion: 'Almacén', estado: 'Activo', fechaActualizacion: '2026-03-28' },
+    { id: '1', nombre: 'Laptop Dell', categoria: 'Equipos', cantidad: 5, ubicacion: 'Oficina A', estado: 'En Stock', fechaActualizacion: '2026-04-15' },
+    { id: '2', nombre: 'Mouse Inalámbrico', categoria: 'Periféricos', cantidad: 12, ubicacion: 'Almacén', estado: 'En Stock', fechaActualizacion: '2026-04-10' },
+    { id: '3', nombre: 'Monitor LG 24"', categoria: 'Equipos', cantidad: 3, ubicacion: 'Oficina B', estado: 'Sin Stock', fechaActualizacion: '2026-04-01' },
+    { id: '4', nombre: 'Teclado Mecánico', categoria: 'Periféricos', cantidad: 1, ubicacion: 'Almacén', estado: 'En Stock', fechaActualizacion: '2026-03-28' },
   ]);
   const [nationalInventoryItems, setNationalInventoryItems] = useState<InventoryItem[]>([
-    { id: '101', nombre: 'Servidores', categoria: 'Infraestructura', cantidad: 8, ubicacion: 'Data Center', estado: 'Activo', fechaActualizacion: '2026-04-18' },
-    { id: '102', nombre: 'Switches Red', categoria: 'Equipos Red', cantidad: 15, ubicacion: 'Central', estado: 'Activo', fechaActualizacion: '2026-04-12' },
-    { id: '103', nombre: 'Cables Ethernet', categoria: 'Periféricos', cantidad: 50, ubicacion: 'Almacén Central', estado: 'Activo', fechaActualizacion: '2026-04-15' },
-    { id: '104', nombre: 'Router Cisco', categoria: 'Equipos Red', cantidad: 6, ubicacion: 'Central', estado: 'Activo', fechaActualizacion: '2026-04-10' },
-    { id: '105', nombre: 'Impresoras Multifunción', categoria: 'Equipos', cantidad: 4, ubicacion: 'Oficinas', estado: 'Mantenimiento', fechaActualizacion: '2026-03-25' },
+    { id: '101', nombre: 'Servidores', categoria: 'Infraestructura', cantidad: 8, ubicacion: 'Data Center', estado: 'En Stock', fechaActualizacion: '2026-04-18' },
+    { id: '102', nombre: 'Switches Red', categoria: 'Equipos Red', cantidad: 15, ubicacion: 'Central', estado: 'En Stock', fechaActualizacion: '2026-04-12' },
+    { id: '103', nombre: 'Cables Ethernet', categoria: 'Periféricos', cantidad: 50, ubicacion: 'Almacén Central', estado: 'En Stock', fechaActualizacion: '2026-04-15' },
+    { id: '104', nombre: 'Router Cisco', categoria: 'Equipos Red', cantidad: 6, ubicacion: 'Central', estado: 'En Stock', fechaActualizacion: '2026-04-10' },
+    { id: '105', nombre: 'Impresoras Multifunción', categoria: 'Equipos', cantidad: 4, ubicacion: 'Oficinas', estado: 'Sin Stock', fechaActualizacion: '2026-03-25' },
   ]);
 
   const currentInventory = inventoryType === 'provincial' ? inventoryItems : nationalInventoryItems;
@@ -267,9 +267,8 @@ function App() {
     }, [] as { name: string; cantidad: number }[]);
 
     const estadoCounts = [
-      { name: 'Activo', value: currentInventory.filter(i => i.estado === 'Activo').length },
-      { name: 'Inactivo', value: currentInventory.filter(i => i.estado === 'Inactivo').length },
-      { name: 'Mantenimiento', value: currentInventory.filter(i => i.estado === 'Mantenimiento').length }
+      { name: 'En Stock', value: currentInventory.filter(i => i.estado === 'En Stock').length },
+      { name: 'Sin Stock', value: currentInventory.filter(i => i.estado === 'Sin Stock').length }
     ];
 
     return { categoriesCounts, estadoCounts };
@@ -474,9 +473,9 @@ function App() {
                 <p className="text-xs text-slate-500 mt-2">Requiere atención</p>
               </div>
               <div className="bg-white rounded-2xl p-6 shadow-md hover:shadow-lg transition border-l-4 border-green-500">
-                <p className="text-slate-600 text-sm font-semibold uppercase">Activos</p>
-                <p className="text-4xl font-bold text-green-600 mt-2">{currentInventory.filter(i => i.estado === 'Activo').length}</p>
-                <p className="text-xs text-slate-500 mt-2">En funcionamiento</p>
+                <p className="text-slate-600 text-sm font-semibold uppercase">En Stock</p>
+                <p className="text-4xl font-bold text-green-600 mt-2">{currentInventory.filter(i => i.estado === 'En Stock').length}</p>
+                <p className="text-xs text-slate-500 mt-2">Disponibles</p>
               </div>
               <div className="bg-white rounded-2xl p-6 shadow-md hover:shadow-lg transition border-l-4 border-blue-500">
                 <p className="text-slate-600 text-sm font-semibold uppercase">Categorías</p>
@@ -542,9 +541,8 @@ function App() {
                   <input type="number" placeholder="Cantidad" value={formData.cantidad} onChange={e => setFormData({...formData, cantidad: e.target.value})} className="p-3 border rounded-xl" required />
                   <input type="text" placeholder="Ubicación" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} className="p-3 border rounded-xl" required />
                   <select value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value as any})} className="p-3 border rounded-xl">
-                    <option value="Activo">Activo</option>
-                    <option value="Inactivo">Inactivo</option>
-                    <option value="Mantenimiento">Mantenimiento</option>
+                    <option value="En Stock">En Stock</option>
+                    <option value="Sin Stock">Sin Stock</option>
                   </select>
                   <div className="flex gap-2">
                     <button type="submit" className="flex-1 bg-orange-600 text-white font-bold p-3 rounded-xl hover:bg-orange-700 transition">Guardar</button>
@@ -575,7 +573,7 @@ function App() {
                 <option value="Infraestructura">Infraestructura</option>
               </select>
               <button 
-                onClick={() => { setEditingItem(null); setFormData({nombre:'', categoria:'', cantidad:'', ubicacion:'', estado:'Activo'}); setShowForm(true); }}
+                onClick={() => { setEditingItem(null); setFormData({nombre:'', categoria:'', cantidad:'', ubicacion:'', estado:'En Stock'}); setShowForm(true); }}
                 className="px-6 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition"
               >
                 ➕ Agregar Item
@@ -610,9 +608,8 @@ function App() {
                       <td className="px-6 py-4 text-slate-600">{item.ubicacion}</td>
                       <td className="px-6 py-4">
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${
-                          item.estado === 'Activo' ? 'bg-green-100 text-green-800' :
-                          item.estado === 'Inactivo' ? 'bg-slate-100 text-slate-800' :
-                          'bg-yellow-100 text-yellow-800'
+                          item.estado === 'En Stock' ? 'bg-green-100 text-green-800' :
+                          'bg-red-100 text-red-800'
                         }`}>
                           {item.estado}
                         </span>
@@ -679,9 +676,8 @@ function App() {
                       fill="#8884d8"
                       dataKey="value"
                     >
-                      <Cell fill="#10B981" />
-                      <Cell fill="#EF4444" />
-                      <Cell fill="#F59E0B" />
+                      <Cell fill="#10B981" /> {/* En Stock */}
+                      <Cell fill="#EF4444" /> {/* Sin Stock */}
                     </Pie>
                     <Tooltip />
                   </PieChart>
@@ -712,7 +708,7 @@ function App() {
               <div className="bg-white rounded-2xl p-6 shadow-md">
                 <h3 className="text-lg font-bold text-slate-900 mb-4">Reporte por Estado</h3>
                 <div className="space-y-3">
-                  {['Activo', 'Inactivo', 'Mantenimiento'].map((estado) => (
+                  {['En Stock', 'Sin Stock'].map((estado) => (
                     <div key={estado} className="flex justify-between items-center">
                       <span className="text-slate-600">{estado}</span>
                       <span className="text-2xl font-bold text-slate-900">{currentInventory.filter(i => i.estado === estado).length}</span>
