@@ -55,6 +55,7 @@ function App() {
     estado: 'En Stock',
     remito: '',
   });
+  const [zoom, setZoom] = useState(1);
   const [viewingRemito, setViewingRemito] = useState<string | null>(null);
   const [reportStatusFilter, setReportStatusFilter] = useState<'En Stock' | 'Sin Stock' | null>(null);
   const [newMemberNombre, setNewMemberNombre] = useState('');
@@ -1025,7 +1026,7 @@ function App() {
           <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white rounded-3xl max-w-3xl w-full p-8 relative shadow-2xl">
               <button 
-                onClick={() => setViewingRemito(null)}
+                onClick={() => { setViewingRemito(null); setZoom(1); }}
                 className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 text-2xl transition"
               >
                 ✕
@@ -1033,9 +1034,14 @@ function App() {
               <h3 className="text-2xl font-bold mb-6 text-slate-900 flex items-center gap-2">
                 <span>📄</span> Vista Previa del Remito
               </h3>
-              <div className="bg-slate-100 rounded-2xl p-4 flex items-center justify-center border-2 border-dashed border-slate-200 min-h-[300px]">
+              <div className="bg-slate-100 rounded-2xl p-4 flex items-center justify-center border-2 border-dashed border-slate-200 min-h-[300px] overflow-auto max-h-[60vh]">
                 {viewingRemito.startsWith('data:image') ? (
-                   <img src={viewingRemito} alt="Remito" className="max-h-[60vh] rounded-lg shadow-md object-contain" />
+                   <img 
+                    src={viewingRemito} 
+                    alt="Remito" 
+                    className="rounded-lg shadow-md transition-transform duration-200 ease-out" 
+                    style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
+                   />
                 ) : (
                   <div className="text-center p-10">
                     <span className="text-6xl block mb-4">📝</span>
@@ -1044,8 +1050,20 @@ function App() {
                   </div>
                 )}
               </div>
+
+              {viewingRemito.startsWith('data:image') && (
+                <div className="flex justify-center items-center gap-4 mt-6 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                  <button onClick={() => setZoom(prev => Math.max(0.5, prev - 0.25))} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-full hover:bg-slate-100 transition shadow-sm text-xl">➖</button>
+                  <span className="font-bold text-slate-700 min-w-[60px] text-center">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button onClick={() => setZoom(prev => Math.min(4, prev + 0.25))} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-full hover:bg-slate-100 transition shadow-sm text-xl">➕</button>
+                  <button onClick={() => setZoom(1)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300 transition font-bold text-sm">Restablecer</button>
+                </div>
+              )}
+
               <button 
-                onClick={() => setViewingRemito(null)}
+                onClick={() => { setViewingRemito(null); setZoom(1); }}
                 className="w-full mt-8 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition shadow-lg"
               >
                 Cerrar Vista
