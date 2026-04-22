@@ -10,5 +10,8 @@ export default defineConfig({
     hmr: {
       overlay: false  // Evita que los errores tapen la pantalla
     }
+  },
+  define: {
+    'process.env': {}
   }
 })

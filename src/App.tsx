@@ -1034,14 +1034,24 @@ function App() {
               <h3 className="text-2xl font-bold mb-6 text-slate-900 flex items-center gap-2">
                 <span>📄</span> Vista Previa del Remito
               </h3>
-              <div className="bg-slate-100 rounded-2xl p-4 flex items-center justify-center border-2 border-dashed border-slate-200 min-h-[300px] overflow-auto max-h-[60vh]">
+              <div 
+                className="bg-slate-100 rounded-2xl p-4 flex items-start justify-center border-2 border-dashed border-slate-200 min-h-[400px] overflow-auto max-h-[65vh] cursor-move"
+                onWheel={(e) => {
+                  if (viewingRemito.startsWith('data:image')) {
+                    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                    setZoom(prev => Math.min(Math.max(0.5, prev + delta), 4));
+                  }
+                }}
+              >
                 {viewingRemito.startsWith('data:image') ? (
-                   <img 
-                    src={viewingRemito} 
-                    alt="Remito" 
-                    className="rounded-lg shadow-md transition-transform duration-200 ease-out" 
-                    style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
-                   />
+                  <div className="inline-block transition-transform duration-200 ease-out origin-top" style={{ transform: `scale(${zoom})` }}>
+                    <img 
+                      src={viewingRemito} 
+                      alt="Remito" 
+                      className="rounded-lg shadow-md max-w-full h-auto" 
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  </div>
                 ) : (
                   <div className="text-center p-10">
                     <span className="text-6xl block mb-4">📝</span>
