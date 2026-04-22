@@ -1,17 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  base: '/', // Asegura que las rutas partan desde la raíz
   server: {
     port: 3000,
-    strictPort: false, // Permitir que use 3001, 3002, etc. si es necesario
-    host: true,       // Esto ayuda a que la red local lo vea mejor
+    strictPort: false,
+    host: true,
     hmr: {
-      overlay: false  // Evita que los errores tapen la pantalla
+      overlay: false
     }
   },
-  define: {
-    'process.env': {}
+  build: {
+    outDir: 'dist', // Directorio que Vercel busca por defecto
+    sourcemap: false
   }
 })
