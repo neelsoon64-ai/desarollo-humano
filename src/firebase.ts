@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
@@ -12,7 +12,12 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-const app = initializeApp(firebaseConfig);
+// Validación preventiva para desarrollo y producción
+if (!firebaseConfig.apiKey) {
+  console.error("⚠️ Firebase API Key no encontrada. Asegúrate de configurar las variables de entorno VITE_FIREBASE_*");
+}
+
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 export const auth = getAuth(app);
 // Si no tienes un ID de base de datos específico, se usa el (default)
