@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
@@ -12,12 +12,18 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Validación preventiva para desarrollo y producción
-if (!firebaseConfig.apiKey) {
-  console.error("⚠️ Firebase API Key no encontrada. Asegúrate de configurar las variables de entorno VITE_FIREBASE_*");
-}
+let app: FirebaseApp;
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+try {
+  if (!firebaseConfig.apiKey) {
+    throw new Error("Falta la API Key de Firebase. Verifica las variables de entorno VITE_FIREBASE_API_KEY.");
+  }
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+} catch (error) {
+  console.error("⚠️ Error crítico al inicializar Firebase:", error);
+  // Re-lanzamos el error para que sea visible en la consola con un mensaje claro
+  throw error;
+}
 
 export const auth = getAuth(app);
 // Si no tienes un ID de base de datos específico, se usa el (default)
@@ -25,6 +31,6 @@ export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
 export const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
-export const loginWithEmailPassword = (email, password) =>
+export const loginWithEmailPassword = (email: string, password: string) =>
   signInWithEmailAndPassword(auth, email, password);
 export const logout = () => signOut(auth);
