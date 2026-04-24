@@ -15,13 +15,16 @@ const firebaseConfig = {
 let app: FirebaseApp;
 
 try {
-  if (!firebaseConfig.apiKey) {
-    throw new Error("Falta la API Key de Firebase. Verifica las variables de entorno VITE_FIREBASE_API_KEY.");
+  const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
+  
+  if (!isConfigValid) {
+    throw new Error("Falta la configuración de Firebase. Asegúrate de añadir las variables VITE_FIREBASE_* en el panel de Vercel.");
   }
+  
   app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 } catch (error) {
-  console.error("⚠️ Error crítico al inicializar Firebase:", error);
-  // Re-lanzamos el error para que sea visible en la consola con un mensaje claro
+  console.error("⚠️ Error de Inicialización:", error instanceof Error ? error.message : error);
+  // Mantenemos el throw para detener la ejecución y evitar errores derivados
   throw error;
 }
 
