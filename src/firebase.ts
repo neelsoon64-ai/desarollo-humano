@@ -13,19 +13,20 @@ const firebaseConfig = {
 };
 
 let app: FirebaseApp;
+export let firebaseConfigValid = false;
 
 try {
   const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
-  
+  firebaseConfigValid = isConfigValid;
+
   if (!isConfigValid) {
-    throw new Error("Falta la configuración de Firebase. Asegúrate de añadir las variables VITE_FIREBASE_* en el panel de Vercel.");
+    console.error("⚠️ Configuración de Firebase incompleta. Verifica las variables de entorno en Vercel.");
   }
-  
-  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+
+  app = getApps().length === 0 ? initializeApp(isConfigValid ? firebaseConfig : {}) : getApps()[0];
 } catch (error) {
-  console.error("⚠️ Error de Inicialización:", error instanceof Error ? error.message : error);
-  // Mantenemos el throw para detener la ejecución y evitar errores derivados
-  throw error;
+  console.error("⚠️ Error de Inicialización de Firebase:", error);
+  app = getApps()[0]; // Fallback
 }
 
 export const auth = getAuth(app);

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, loginWithGoogle, loginWithEmailPassword, logout } from './firebase';
+import { auth, loginWithGoogle, loginWithEmailPassword, logout, firebaseConfigValid } from './firebase';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -468,6 +468,28 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+      {!firebaseConfigValid && (
+        <div className="min-h-screen bg-red-50 flex items-center justify-center p-4">
+          <div className="bg-white p-8 rounded-lg shadow-lg max-w-md text-center border-l-4 border-red-500">
+            <h1 className="text-2xl font-bold text-red-600 mb-4">⚠️ Error de Configuración</h1>
+            <p className="text-gray-700 mb-4">
+              Firebase no está configurado correctamente. Las variables de entorno no se han encontrado.
+            </p>
+            <div className="bg-gray-100 p-4 rounded text-sm text-left mb-4">
+              <p className="font-mono text-xs text-gray-800">
+                Asegúrate de que en Vercel has configurado las variables de entorno:
+                <br/>• VITE_FIREBASE_API_KEY
+                <br/>• VITE_FIREBASE_AUTH_DOMAIN
+                <br/>• VITE_FIREBASE_PROJECT_ID
+                <br/>Y otras.
+              </p>
+            </div>
+            <p className="text-gray-600 text-xs">Recarga la página una vez configures las variables.</p>
+          </div>
+        </div>
+      )}
+      {firebaseConfigValid && (
+      <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       {/* Sidebar */}
       <div className="fixed left-0 top-0 w-64 h-screen bg-slate-900 text-white p-6 shadow-xl">
         <div className="flex items-center gap-3 mb-8">
@@ -1082,6 +1104,7 @@ function App() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
