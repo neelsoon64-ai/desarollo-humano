@@ -1,10 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite' // 1. Agregamos esta importación
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  base: '/', // Asegura que las rutas partan desde la raíz
+  plugins: [
+    react(), 
+    tailwindcss() // 2. Agregamos el plugin aquí
+  ],
+  base: '/',
   server: {
     port: 3000,
     strictPort: false,
@@ -14,7 +18,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist', // Directorio que Vercel busca por defecto
+    outDir: 'dist',
     sourcemap: false
   }
 })
