@@ -1,24 +1,14 @@
 @import "tailwindcss";
 
 @theme {
-  body {
-    margin: 0;
-    background-color: #F0F4F7;
-    font-family: 'Inter', sans-serif;
-  }
+  /* Aquí solo defines variables si quieres personalizar tu tema */
+  --font-inter: "Inter", sans-serif;
+  --color-custom-gray: #F0F4F7;
 }
 
-@utility spinner {
-  .spinner {
-    animation: spin 1s linear infinite;
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* Los estilos globales van FUERA del bloque @theme */
+body {
+  margin: 0;
+  background-color: #F0F4F7;
+  font-family: 'Inter', sans-serif;
 }
