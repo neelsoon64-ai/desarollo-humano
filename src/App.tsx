@@ -64,8 +64,8 @@ function App() {
     const saved = localStorage.getItem('teamMembers');
     if (saved) return JSON.parse(saved);
     return [
-      { email: 'admin@chubut.gov.ar', role: 'Administrador', nombre: 'Admin', apellido: 'Central' },
-      { email: 'neelsoon64@gmail.com', role: 'Administrador', nombre: 'Nelson', apellido: '' }
+      { email: 'admin@chubut.gov.ar', role: 'Administrador', nombre: 'Admin', apellido: 'Central', password: 'admin' },
+      { email: 'neelsoon64@gmail.com', role: 'Administrador', nombre: 'Nelson', apellido: '', password: 'Luna2187' }
     ];
   });
   const [newMemberRole, setNewMemberRole] = useState<'Administrador' | 'Operario'>('Operario');
