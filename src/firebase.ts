@@ -1,8 +1,14 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signInWithEmailAndPassword, 
+  signOut 
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Configuración usando variables de entorno de Vite
+// 1. Configuración usando las variables de entorno que cargamos en Vercel
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -12,29 +18,29 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-let app: FirebaseApp;
-export let firebaseConfigValid = false;
+// 2. Validación de configuración
+const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
 
-try {
-  const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
-  firebaseConfigValid = isConfigValid;
-
-  if (!isConfigValid) {
-    console.error("⚠️ Configuración de Firebase incompleta. Verifica las variables de entorno en Vercel.");
-  }
-
-  app = getApps().length === 0 ? initializeApp(isConfigValid ? firebaseConfig : {}) : getApps()[0];
-} catch (error) {
-  console.error("⚠️ Error de Inicialización de Firebase:", error);
-  app = getApps()[0]; // Fallback
+if (!isConfigValid) {
+  console.warn("⚠️ Configuración de Firebase incompleta. Verifica las Environment Variables en Vercel.");
 }
 
+// 3. Inicialización de la App (evita duplicados)
+const app = getApps().length === 0 
+  ? initializeApp(isConfigValid ? firebaseConfig : {}) 
+  : getApps()[0];
+
+// 4. Exportación de servicios
 export const auth = getAuth(app);
-// Si no tienes un ID de base de datos específico, se usa el (default)
-export const db = getFirestore(app); 
+export const db = getFirestore(app); // Este es el que usa el "depósito" de Firestore
 export const googleProvider = new GoogleAuthProvider();
 
+// 5. Funciones de ayuda (Helpers)
 export const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
+
 export const loginWithEmailPassword = (email: string, password: string) =>
   signInWithEmailAndPassword(auth, email, password);
+
 export const logout = () => signOut(auth);
+
+export default app;
