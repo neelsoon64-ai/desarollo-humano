@@ -1,12 +1,7 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* El bloque @theme es SOLO para variables */
-@theme {
-  --font-inter: 'Inter', sans-serif;
-  --color-brand-bg: #F0F4F7;
-}
-
-/* El CSS normal de toda la vida va AFUERA del @theme */
 body {
   margin: 0;
   background-color: #F0F4F7;
