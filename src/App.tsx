@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, loginWithGoogle, loginWithEmailPassword, logout, firebaseConfigValid } from './firebase';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import jsPDF from 'jspdf';
+import { auth, loginWithGoogle, loginWithEmailPassword, logout } from './firebase';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
-import { collection, getDocs, addDoc, query, where, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, deleteDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 interface InventoryItem {
@@ -47,18 +46,13 @@ function App() {
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [formData, setFormData] = useState<FormData>({
-    nombre: '',
-    categoria: '',
-    cantidad: '',
-    ubicacion: '',
-    estado: 'En Stock',
-    remito: '',
+    nombre: '', categoria: '', cantidad: '', ubicacion: '', estado: 'En Stock', remito: '',
   });
-  const [zoom, setZoom] = useState(1);
-  const [viewingRemito, setViewingRemito] = useState<string | null>(null);
-  const [reportStatusFilter, setReportStatusFilter] = useState<'En Stock' | 'Sin Stock' | null>(null);
-  const [newMemberNombre, setNewMemberNombre] = useState('');
-  const [newMemberApellido, setNewMemberApellido] = useState('');
+
+  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'inventario' | 'reportes' | 'configuracion'>('dashboard');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => {
     const saved = localStorage.getItem('teamMembers');
     if (saved) return JSON.parse(saved);
@@ -67,35 +61,16 @@ function App() {
       { email: 'neelsoon64@gmail.com', role: 'Administrador', nombre: 'Nelson', apellido: '', password: 'Luna2187' }
     ];
   });
-  const [newMemberRole, setNewMemberRole] = useState<'Administrador' | 'Operario'>('Operario');
-  const [newMemberPassword, setNewMemberPassword] = useState('');
 
-  const [activeMenu, setActiveMenu] = useState<'dashboard' | 'inventario' | 'reportes' | 'configuracion'>('dashboard');
-  const [inventoryType, setInventoryType] = useState<'provincial' | 'nacional'>('provincial');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Todas');
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-  const [nationalInventoryItems, setNationalInventoryItems] = useState<InventoryItem[]>([]);
-
-  const currentInventory = inventoryType === 'provincial' ? inventoryItems : nationalInventoryItems;
-
-  const currentUserData = teamMembers.find(m => m.email === user?.email);
+  const currentUserData = teamMembers.find(m => m.email.toLowerCase() === user?.email?.toLowerCase());
   const isAdmin = currentUserData?.role === 'Administrador' || user?.email === 'admin@chubut.gov.ar' || user?.email === 'neelsoon64@gmail.com';
-  const userRole = isAdmin ? 'Administrador' : 'Operario';
-  const userFullName = currentUserData ? `${currentUserData.nombre} ${currentUserData.apellido}`.trim() : (user?.displayName || user?.email || 'Desconocido');
+  const userFullName = currentUserData ? `${currentUserData.nombre} ${currentUserData.apellido}`.trim() : (user?.displayName || user?.email || 'Usuario');
 
-  const filteredInventory = currentInventory.filter(item => {
-    const matchesSearch = item.nombre.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'Todas' || item.categoria === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  // --- NUEVA FUNCIÓN: Sincronizar Perfil de Usuario ---
+  // --- SINCRONIZACIÓN DE USUARIO ---
   const syncUserToFirestore = async (userAuth: User) => {
     try {
       const userRef = doc(db, 'users', userAuth.uid);
-      const localData = teamMembers.find(m => m.email?.toLowerCase() === userAuth.email?.toLowerCase());
-
+      const localData = teamMembers.find(m => m.email.toLowerCase() === userAuth.email?.toLowerCase());
       const userData = {
         uid: userAuth.uid,
         email: userAuth.email,
@@ -104,192 +79,91 @@ function App() {
         role: localData?.role || 'Operario',
         lastLogin: new Date().toISOString()
       };
-
       await setDoc(userRef, userData, { merge: true });
-      console.log("Perfil de usuario sincronizado en Firestore");
-    } catch (e) {
-      console.error("Error al sincronizar usuario:", e);
-    }
+    } catch (e) { console.error("Error sync:", e); }
   };
 
-  const handleEdit = (item: InventoryItem) => {
-    setEditingItem(item);
-    setFormData({
-      nombre: item.nombre,
-      categoria: item.categoria,
-      cantidad: item.cantidad.toString(),
-      ubicacion: item.ubicacion,
-      estado: item.estado,
-      remito: item.remito || ''
+  const loadInventory = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'inventory'));
+      const items = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InventoryItem));
+      setInventoryItems(items);
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      if (u) {
+        await syncUserToFirestore(u);
+        await loadInventory();
+      }
+      setLoading(false);
     });
-    setShowForm(true);
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setFormData({ ...formData, remito: reader.result as string });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de eliminar este elemento?')) {
-      try {
-        await deleteDoc(doc(db, 'inventory', id));
-      } catch (e) { }
-      
-      const updateList = (items: InventoryItem[]) => items.filter(i => i.id !== id);
-      if (inventoryType === 'provincial') setInventoryItems(updateList);
-      else setNationalInventoryItems(updateList);
-    }
-  };
+    return () => unsubscribe();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const itemData: any = {
+    setLoginLoading(true);
+    const itemData = {
       nombre: formData.nombre,
       categoria: formData.categoria,
       cantidad: parseInt(formData.cantidad) || 0,
       ubicacion: formData.ubicacion,
       estado: formData.estado,
       fechaActualizacion: new Date().toISOString().split('T')[0],
-      userId: user?.uid || 'user-id-fallback',
       cargadoPor: userFullName,
       remito: formData.remito
     };
 
     try {
-      setLoginLoading(true);
       if (editingItem) {
-        if (editingItem.id.length > 5) await updateDoc(doc(db, 'inventory', editingItem.id), itemData);
-        
-        const updateList = (items: InventoryItem[]) => 
-          items.map(i => i.id === editingItem.id ? { ...itemData, id: i.id } : i);
-          
-        if (inventoryType === 'provincial') setInventoryItems(updateList);
-        else setNationalInventoryItems(updateList);
-        alert("¡Item actualizado!");
+        await updateDoc(doc(db, 'inventory', editingItem.id), itemData);
       } else {
-        try {
-          const docRef = await addDoc(collection(db, 'inventory'), itemData);
-          const newItem = { ...itemData, id: docRef.id };
-          if (inventoryType === 'provincial') setInventoryItems(prev => [...prev, newItem]);
-          else setNationalInventoryItems(prev => [...prev, newItem]);
-          alert("¡Guardado en base de datos!");
-        } catch (dbError) {
-          const localId = Math.random().toString(36).substr(2, 9);
-          const newItem = { ...itemData, id: localId };
-          if (inventoryType === 'provincial') setInventoryItems(prev => [...prev, newItem]);
-          else setNationalInventoryItems(prev => [...prev, newItem]);
-          alert("Guardado localmente");
-        }
+        await addDoc(collection(db, 'inventory'), itemData);
       }
+      await loadInventory();
       setShowForm(false);
       setEditingItem(null);
-    } catch (e) { 
-      console.error(e);
-    } finally {
-      setLoginLoading(false);
+      setFormData({ nombre: '', categoria: '', cantidad: '', ubicacion: '', estado: 'En Stock', remito: '' });
+    } catch (e) { alert("Error al guardar"); }
+    setLoginLoading(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm('¿Eliminar este item?')) {
+      await deleteDoc(doc(db, 'inventory', id));
+      await loadInventory();
     }
   };
 
-  useEffect(() => {
-    localStorage.setItem('teamMembers', JSON.stringify(teamMembers));
-  }, [teamMembers]);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-      if (u) {
-        syncUserToFirestore(u); // Se ejecuta al loguear
-      }
-    });
-    return () => unsubscribe();
-  }, [teamMembers]);
-
-  const handleEmailLogin = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoginError('');
-    setLoginLoading(true);
-    const trimmedEmail = email.trim();
-    try {
-      await loginWithEmailPassword(trimmedEmail, password);
-    } catch (error) {
-      const localMember = teamMembers.find(
-        (m) => m.email.toLowerCase() === trimmedEmail.toLowerCase() && m.password === password
-      );
-      if (localMember) {
-        setUser({ email: localMember.email, uid: `local-${localMember.email}` } as any);
-      } else {
-        setLoginError('Credenciales incorrectas.');
-      }
-    } finally {
-      setLoginLoading(false);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setFormData({ ...formData, remito: reader.result as string });
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setLoginLoading(true);
-    try {
-      await loginWithGoogle();
-    } catch (error) {
-      setLoginError('Error con Google.');
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user) {
-      loadInventoryFromFirebase();
-    }
-  }, [user]);
-
-  const loadInventoryFromFirebase = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'inventory'));
-      const items: InventoryItem[] = [];
-      querySnapshot.forEach((doc) => {
-        items.push({ id: doc.id, ...doc.data() } as InventoryItem);
-      });
-      if (items.length > 0) setInventoryItems(items);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const exportToExcel = () => {
-    const worksheetData = [
-      [`Reporte de Inventario`],
-      ['Nombre', 'Categoría', 'Cantidad', 'Ubicación', 'Estado', 'Fecha'],
-      ...currentInventory.map(item => [item.nombre, item.categoria, item.cantidad, item.ubicacion, item.estado, item.fechaActualizacion])
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventario');
-    XLSX.writeFile(workbook, `reporte.xlsx`);
-  };
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold">Cargando sistema...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-orange-600 uppercase">Cargando Sistema Secretaría...</div>;
 
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
         <div className="bg-white rounded-3xl p-8 shadow-2xl w-full max-w-sm text-center">
           <img src="https://desarrollohumano.chubut.gov.ar/wp-content/uploads/2024/04/logochubut.png" className="w-32 mx-auto mb-6" alt="Chubut" />
-          <h1 className="text-2xl font-bold mb-6">Desarrollo Humano - Inventario</h1>
-          <form onSubmit={handleEmailLogin} className="space-y-4">
+          <h1 className="text-xl font-bold mb-6 text-slate-800">Inventario Subsecretaría</h1>
+          <form onSubmit={(e) => { e.preventDefault(); loginWithEmailPassword(email, password).catch(() => setLoginError("Error de acceso")); }} className="space-y-4">
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" className="w-full p-3 border rounded-xl" required />
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" className="w-full p-3 border rounded-xl" required />
-            {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
-            <button type="submit" disabled={loginLoading} className="w-full bg-orange-600 text-white p-3 rounded-xl font-bold">Ingresar</button>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Contraseña" className="w-full p-3 border rounded-xl" required />
+            {loginError && <p className="text-red-500 text-xs font-bold">{loginError}</p>}
+            <button type="submit" className="w-full bg-orange-600 text-white p-3 rounded-xl font-bold hover:bg-orange-700 transition">Ingresar</button>
           </form>
-          <button onClick={handleGoogleLogin} className="w-full mt-4 border p-3 rounded-xl flex justify-center gap-2">Google</button>
+          <button onClick={() => loginWithGoogle()} className="w-full mt-4 border border-slate-300 p-3 rounded-xl flex justify-center items-center gap-2 font-medium hover:bg-slate-50 transition">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/0/google.svg" width="18" alt="G" /> Google
+          </button>
         </div>
       </div>
     );
@@ -297,97 +171,138 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <div className="w-64 bg-slate-900 text-white p-6 fixed h-full">
-        <h2 className="text-xl font-bold mb-8">📦 InventarioApp</h2>
+      {/* Sidebar */}
+      <div className="w-64 bg-slate-900 text-white p-6 fixed h-full shadow-xl">
+        <div className="mb-10 text-center">
+          <h2 className="text-xl font-bold text-orange-500 uppercase tracking-tighter">Inventario Stock</h2>
+          <p className="text-[10px] text-slate-400">Secretaría de Trabajo Chubut</p>
+        </div>
         <nav className="space-y-2">
-          <button onClick={() => setActiveMenu('dashboard')} className={`w-full text-left p-3 rounded-lg ${activeMenu === 'dashboard' ? 'bg-orange-600' : ''}`}>📊 Dashboard</button>
-          <button onClick={() => setActiveMenu('inventario')} className={`w-full text-left p-3 rounded-lg ${activeMenu === 'inventario' ? 'bg-orange-600' : ''}`}>📋 Inventario</button>
-          {isAdmin && <button onClick={() => setActiveMenu('configuracion')} className={`w-full text-left p-3 rounded-lg ${activeMenu === 'configuracion' ? 'bg-orange-600' : ''}`}>⚙️ Configuración</button>}
+          <button onClick={() => setActiveMenu('dashboard')} className={`w-full text-left p-3 rounded-xl transition ${activeMenu === 'dashboard' ? 'bg-orange-600' : 'hover:bg-slate-800'}`}>📊 Panel General</button>
+          <button onClick={() => setActiveMenu('inventario')} className={`w-full text-left p-3 rounded-xl transition ${activeMenu === 'inventario' ? 'bg-orange-600' : 'hover:bg-slate-800'}`}>📋 Inventario</button>
+          {isAdmin && <button onClick={() => setActiveMenu('configuracion')} className={`w-full text-left p-3 rounded-xl transition ${activeMenu === 'configuracion' ? 'bg-orange-600' : 'hover:bg-slate-800'}`}>⚙️ Configuración</button>}
         </nav>
-        <div className="absolute bottom-6">
-          <p className="text-xs text-slate-400">{user.email}</p>
-          <button onClick={() => logout()} className="text-red-400 text-sm font-bold mt-2">Cerrar sesión</button>
+        <div className="absolute bottom-6 left-6 right-6">
+          <p className="text-[10px] text-slate-400 truncate mb-2">{user.email}</p>
+          <button onClick={() => logout()} className="w-full bg-red-500/10 text-red-500 p-2 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white transition">CERRAR SESIÓN</button>
         </div>
       </div>
 
-      <div className="ml-64 p-8 w-full">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 uppercase">
-            {activeMenu === 'dashboard' ? 'Panel de Control' : 'Gestión'}
-          </h1>
-          <p className="text-slate-500">Ministerio de Desarrollo Humano - Chubut</p>
-        </header>
-
+      {/* Main */}
+      <div className="ml-64 p-10 w-full">
         {activeMenu === 'dashboard' && (
-          <div className="grid grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm">
-              <p className="text-sm font-bold text-slate-500 uppercase">Total Items</p>
-              <p className="text-4xl font-bold">{currentInventory.length}</p>
+          <div>
+            <div className="grid grid-cols-3 gap-6 mb-10">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-orange-500">
+                <p className="text-xs font-bold text-slate-400 uppercase">Items Totales</p>
+                <p className="text-4xl font-black">{inventoryItems.length}</p>
+              </div>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-red-500">
+                <p className="text-xs font-bold text-slate-400 uppercase">Sin Stock</p>
+                <p className="text-4xl font-black">{inventoryItems.filter(i => i.estado === 'Sin Stock').length}</p>
+              </div>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-blue-500">
+                <p className="text-xs font-bold text-slate-400 uppercase">Ubicaciones</p>
+                <p className="text-4xl font-black">{new Set(inventoryItems.map(i => i.ubicacion)).size}</p>
+              </div>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-orange-500">
-              <p className="text-sm font-bold text-slate-500 uppercase">Sin Stock</p>
-              <p className="text-4xl font-bold">{currentInventory.filter(i => i.estado === 'Sin Stock').length}</p>
-            </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm">
-              <p className="text-sm font-bold text-slate-500 uppercase">Ubicaciones</p>
-              <p className="text-4xl font-bold">{new Set(currentInventory.map(i => i.ubicacion)).size}</p>
+            <div className="bg-white p-8 rounded-2xl shadow-sm h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={inventoryItems.slice(0, 8)}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="nombre" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="cantidad" fill="#ea580c" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         )}
 
         {activeMenu === 'inventario' && (
-          <div className="bg-white rounded-2xl shadow-sm p-6">
-            <div className="flex justify-between mb-6">
-              <input type="text" placeholder="Buscar..." className="p-2 border rounded-lg w-64" onChange={e => setSearchTerm(e.target.value)} />
-              <button onClick={() => setShowForm(true)} className="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold">+ Nuevo</button>
+          <div className="bg-white rounded-2xl shadow-sm p-8">
+            <div className="flex justify-between items-center mb-8">
+              <input type="text" placeholder="Buscar insumo..." className="p-3 border rounded-xl w-80 outline-orange-500" onChange={e => setSearchTerm(e.target.value)} />
+              <button onClick={() => { setShowForm(!showForm); setEditingItem(null); }} className="bg-orange-600 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition">
+                {showForm ? 'Cerrar' : '+ Nuevo Ingreso'}
+              </button>
             </div>
 
             {showForm && (
-              <form onSubmit={handleSubmit} className="grid grid-cols-3 gap-4 mb-8 p-4 border rounded-xl bg-orange-50">
-                <input type="text" placeholder="Nombre" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="p-2 border rounded" required />
-                <input type="text" placeholder="Categoría" value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="p-2 border rounded" required />
-                <input type="number" placeholder="Cantidad" value={formData.cantidad} onChange={e => setFormData({...formData, cantidad: e.target.value})} className="p-2 border rounded" required />
-                <input type="text" placeholder="Ubicación" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} className="p-2 border rounded" required />
-                <select value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value as any})} className="p-2 border rounded">
+              <form onSubmit={handleSubmit} className="mb-10 p-6 bg-slate-50 rounded-2xl grid grid-cols-3 gap-4 border border-slate-200">
+                <input type="text" placeholder="Nombre" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="p-3 border rounded-xl" required />
+                <input type="text" placeholder="Categoría" value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})} className="p-3 border rounded-xl" required />
+                <input type="number" placeholder="Cantidad" value={formData.cantidad} onChange={e => setFormData({...formData, cantidad: e.target.value})} className="p-3 border rounded-xl" required />
+                <input type="text" placeholder="Ubicación" value={formData.ubicacion} onChange={e => setFormData({...formData, ubicacion: e.target.value})} className="p-3 border rounded-xl" required />
+                <select value={formData.estado} onChange={e => setFormData({...formData, estado: e.target.value as any})} className="p-3 border rounded-xl">
                   <option value="En Stock">En Stock</option>
                   <option value="Sin Stock">Sin Stock</option>
                 </select>
-                <div className="flex gap-2">
-                  <button type="submit" className="bg-orange-600 text-white flex-1 rounded font-bold">Guardar</button>
-                  <button type="button" onClick={() => setShowForm(false)} className="bg-slate-300 flex-1 rounded">X</button>
+                <div className="flex flex-col">
+                  <label className="text-[10px] font-bold text-slate-400 mb-1">REMITO (Imagen)</label>
+                  <input type="file" accept="image/*" onChange={handleFileChange} className="text-xs" />
                 </div>
+                <button type="submit" className="col-span-3 bg-orange-600 text-white p-3 rounded-xl font-bold uppercase">{editingItem ? 'Actualizar' : 'Guardar en Base de Datos'}</button>
               </form>
             )}
 
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b text-slate-400 text-sm">
-                  <th className="py-3">PRODUCTO</th>
-                  <th>CATEGORÍA</th>
-                  <th>CANT.</th>
-                  <th>UBICACIÓN</th>
-                  <th>ESTADO</th>
-                  <th>ACCIONES</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredInventory.map(item => (
-                  <tr key={item.id} className="border-b hover:bg-slate-50 transition">
-                    <td className="py-4 font-semibold">{item.nombre}</td>
-                    <td className="text-slate-600">{item.categoria}</td>
-                    <td className="font-bold">{item.cantidad}</td>
-                    <td>{item.ubicacion}</td>
-                    <td>
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.estado === 'En Stock' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{item.estado}</span>
-                    </td>
-                    <td>
-                      <button onClick={() => handleEdit(item)} className="text-blue-600 mr-2">✏️</button>
-                      <button onClick={() => handleDelete(item.id)} className="text-red-600">🗑️</button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-bold tracking-widest">
+                  <tr>
+                    <th className="px-6 py-4">Producto</th>
+                    <th>Categoría</th>
+                    <th>Cant.</th>
+                    <th>Ubicación</th>
+                    <th>Estado</th>
+                    <th>Remito</th>
+                    <th>Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {inventoryItems.filter(i => i.nombre.toLowerCase().includes(searchTerm.toLowerCase())).map(item => (
+                    <tr key={item.id} className="hover:bg-slate-50 transition">
+                      <td className="px-6 py-4 font-bold text-slate-700">{item.nombre}</td>
+                      <td className="text-slate-500">{item.categoria}</td>
+                      <td className="font-black">{item.cantidad}</td>
+                      <td className="text-slate-500">{item.ubicacion}</td>
+                      <td>
+                        <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${item.estado === 'En Stock' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{item.estado}</span>
+                      </td>
+                      <td>
+                        {item.remito ? <button onClick={() => window.open(item.remito)} className="text-blue-500 text-xs underline">Ver</button> : <span className="text-slate-300 text-xs">-</span>}
+                      </td>
+                      <td className="py-4">
+                        <button onClick={() => { 
+                          setEditingItem(item);
+                          setFormData({ nombre: item.nombre, categoria: item.categoria, cantidad: item.cantidad.toString(), ubicacion: item.ubicacion, estado: item.estado, remito: item.remito || '' });
+                          setShowForm(true);
+                        }} className="text-blue-400 mr-3">✏️</button>
+                        <button onClick={() => handleDelete(item.id)} className="text-red-300">🗑️</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeMenu === 'configuracion' && (
+          <div className="bg-white rounded-2xl shadow-sm p-8">
+            <h2 className="text-xl font-bold mb-6">Personal de la Subsecretaría</h2>
+            <div className="space-y-4">
+              {teamMembers.map((m, idx) => (
+                <div key={idx} className="flex justify-between items-center p-4 border rounded-xl bg-slate-50">
+                  <div>
+                    <p className="font-bold">{m.nombre} {m.apellido}</p>
+                    <p className="text-xs text-slate-500">{m.email} - <span className="text-orange-600 font-bold">{m.role}</span></p>
+                  </div>
+                  <span className="bg-slate-200 px-3 py-1 rounded-full text-[10px] font-bold">ACTIVO</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
