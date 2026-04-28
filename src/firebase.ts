@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider, 
@@ -8,28 +8,39 @@ import {
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Configuración REAL de tu proyecto
+// 1. Configuración usando las variables de entorno que cargamos en Vercel
 const firebaseConfig = {
-  apiKey: "AIzaSyBLHlM1Ox5moBPjXQRL5QtjbAAWduJlI2k",
-  authDomain: "gen-lang-client-0628656636.firebaseapp.com",
-  databaseURL: "https://gen-lang-client-0628656636-default-rtdb.firebaseio.com",
-  projectId: "gen-lang-client-0628656636",
-  storageBucket: "gen-lang-client-0628656636.firebasestorage.app",
-  messagingSenderId: "471628166079",
-  appId: "1:471628166079:web:4184c314daee766db9e70a"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Inicialización
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+// 2. Validación de configuración
+const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== 'undefined';
 
+if (!isConfigValid) {
+  console.warn("⚠️ Configuración de Firebase incompleta. Verifica las Environment Variables en Vercel.");
+}
+
+// 3. Inicialización de la App (evita duplicados)
+const app = getApps().length === 0 
+  ? initializeApp(isConfigValid ? firebaseConfig : {}) 
+  : getApps()[0];
+
+// 4. Exportación de servicios
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = getFirestore(app); // Este es el que usa el "depósito" de Firestore
 export const googleProvider = new GoogleAuthProvider();
 
+// 5. Funciones de ayuda (Helpers)
 export const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
+
 export const loginWithEmailPassword = (email: string, password: string) =>
   signInWithEmailAndPassword(auth, email, password);
+
 export const logout = () => signOut(auth);
 
 export default app;
-export const firebaseConfigValid = true;
