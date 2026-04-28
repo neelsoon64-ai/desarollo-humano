@@ -32,3 +32,4 @@ export const loginWithEmailPassword = (email: string, password: string) =>
 export const logout = () => signOut(auth);
 
 export default app;
+export const firebaseConfigValid = true;
