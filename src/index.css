@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  /* Esto asegura que el fondo ocupe toda la pantalla sin scroll innecesario */
+  min-height: 100vh;
+  background-color: #f1f5f9;
+}
+
+/* Suavizado de fuentes para que se vea más 'Apple' */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  box-sizing: border-box;
+}
